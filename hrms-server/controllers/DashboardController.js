@@ -16,6 +16,11 @@ export const hrDashboard = async (req, res) => {
     .sort({ createdAt: -1 })
     .lean();
   const ids = employees.map((e) => e._id);
+  const weekDates = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(now);
+    date.setDate(now.getDate() - (6 - index));
+    return getDateKey(date);
+  });
   const [present, onLeave, pendingLeaves, payroll, attendanceToday] =
     await Promise.all([
       Attendance.countDocuments({
@@ -37,6 +42,26 @@ export const hrDashboard = async (req, res) => {
       }).lean(),
       Attendance.find({ user: { $in: ids }, date: today }).lean(),
     ]);
+  const [leaveStatusRows, attendanceWeekRows] = await Promise.all([
+    Leave.aggregate([
+      {
+        $match: {
+          hrId,
+          createdAt: { $gte: new Date(now.getFullYear(), now.getMonth(), 1) },
+        },
+      },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]),
+    Attendance.aggregate([
+      { $match: { user: { $in: ids }, date: { $in: weekDates } } },
+      {
+        $group: {
+          _id: { date: "$date", status: "$status" },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
   const totalPayroll = payroll.reduce(
     (s, p) => s + Number(p.netSalary ?? p.totalEarnings ?? 0),
     0,
@@ -51,6 +76,28 @@ export const hrDashboard = async (req, res) => {
     (a) => a.status === "late",
   ).length;
   const active = employees.filter((e) => e.empStatus === "active").length;
+  const leaveOverview = leaveStatusRows.reduce((result, row) => {
+    result[row._id] = row.count;
+    return result;
+  }, {});
+  const attendanceOverview = weekDates.map((date) => {
+    const rows = attendanceWeekRows.filter((row) => row._id.date === date);
+    const presentCount = rows.reduce(
+      (sum, row) =>
+        sum +
+        (row._id.status === "present" || row._id.status === "late"
+          ? row.count
+          : 0),
+      0,
+    );
+    const lateCount = rows.find((row) => row._id.status === "late")?.count || 0;
+    return {
+      date,
+      present: presentCount,
+      late: lateCount,
+      absent: Math.max(0, active - presentCount),
+    };
+  });
   return success(res, {
     data: {
       metrics: {
@@ -74,6 +121,8 @@ export const hrDashboard = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(10)
         .lean(),
+      leaveOverview,
+      attendanceOverview,
     },
   });
 };

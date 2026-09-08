@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useSelector } from "react-redux";
+import { API } from "../../../Core/url";
 import {
   BarChart3,
   CalendarDays,
@@ -11,10 +13,12 @@ import {
 } from "lucide-react";
 
 const HrReportsScreen = () => {
+  const { token } = useSelector((state) => state.auth);
   const [reportType, setReportType] = useState("Attendance");
   const [period, setPeriod] = useState("September 2026");
   const [department, setDepartment] = useState("All Departments");
   const [showReport, setShowReport] = useState(false);
+  const [liveReportRows, setLiveReportRows] = useState([]);
 
   const attendanceData = [
     {
@@ -148,22 +152,56 @@ const HrReportsScreen = () => {
   ];
 
   const filteredAttendance = useMemo(() => {
-    if (department === "All Departments") return attendanceData;
+    const rows = reportType === "Attendance" ? liveReportRows : [];
+    if (department === "All Departments") return rows;
 
-    return attendanceData.filter((item) => item.department === department);
-  }, [department, attendanceData]);
+    return rows.filter((item) => item.department === department);
+  }, [department, attendanceData, liveReportRows, reportType]);
 
   const filteredLeave = useMemo(() => {
-    if (department === "All Departments") return leaveData;
+    const rows = reportType === "Leave" ? liveReportRows : [];
+    if (department === "All Departments") return rows;
 
-    return leaveData.filter((item) => item.department === department);
-  }, [department, leaveData]);
+    return rows.filter((item) => item.department === department);
+  }, [department, leaveData, liveReportRows, reportType]);
 
   const filteredPayroll = useMemo(() => {
-    if (department === "All Departments") return payrollData;
+    const rows = reportType === "Payroll" ? liveReportRows : [];
+    if (department === "All Departments") return rows;
 
-    return payrollData.filter((item) => item.department === department);
-  }, [department, payrollData]);
+    return rows.filter((item) => item.department === department);
+  }, [department, payrollData, liveReportRows, reportType]);
+
+  const generateLiveReport = async () => {
+    if (!token) return;
+    const endpoint =
+      reportType === "Attendance"
+        ? "attendance"
+        : reportType === "Leave"
+          ? "leave"
+          : "payroll";
+    try {
+      const response = await API.get(`/reports/${endpoint}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const rows = response?.data?.data || [];
+      setLiveReportRows(
+        rows.map((row) => ({
+          ...row,
+          employee: row.employee || row.user?.name || row.empId?.name || "-",
+          id: row.employeeId || row.user?.empId || row.empId?.empId || "-",
+          department:
+            row.department ||
+            row.user?.department?.title ||
+            row.empId?.department?.title ||
+            "-",
+        })),
+      );
+      setShowReport(true);
+    } catch (error) {
+      console.error("Failed to generate HR report:", error);
+    }
+  };
 
   const formatCurrency = (value) => {
     return `₹${value.toLocaleString("en-IN")}`;
@@ -265,7 +303,7 @@ const HrReportsScreen = () => {
 
         <div className="mt-5 flex flex-col gap-2 sm:flex-row">
           <button
-            onClick={() => setShowReport(true)}
+            onClick={generateLiveReport}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
           >
             <BarChart3 size={17} />

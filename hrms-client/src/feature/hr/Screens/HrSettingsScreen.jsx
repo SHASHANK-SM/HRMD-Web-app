@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
+import { API } from "../../../Core/url";
 import {
   User,
   Bell,
@@ -12,14 +14,15 @@ import {
 } from "lucide-react";
 
 const HrSettingsScreen = () => {
+  const { token } = useSelector((state) => state.auth);
   const [activeTab, setActiveTab] = useState("Profile");
   const [saved, setSaved] = useState(false);
 
   const [profile, setProfile] = useState({
-    name: "HR Admin",
-    email: "hr@company.com",
-    phone: "+91 98765 43210",
-    designation: "HR Administrator",
+    name: "",
+    email: "",
+    phone: "",
+    designation: "",
   });
 
   const [notifications, setNotifications] = useState({
@@ -34,6 +37,29 @@ const HrSettingsScreen = () => {
     newPassword: "",
     confirm: "",
   });
+
+  useEffect(() => {
+    if (!token) return;
+    const authConfig = { headers: { Authorization: `Bearer ${token}` } };
+    Promise.all([
+      API.get("/auth/profile", authConfig),
+      API.get("/settings", authConfig),
+    ])
+      .then(([profileResponse, settingsResponse]) => {
+        const user = profileResponse?.data?.data || {};
+        setProfile({
+          name: user.name || "",
+          email: user.email || "",
+          phone: user.mobile || "",
+          designation: user.jobTitle || "",
+        });
+        setNotifications((previous) => ({
+          ...previous,
+          ...(settingsResponse?.data?.data || {}),
+        }));
+      })
+      .catch((error) => console.error("Failed to fetch HR settings:", error));
+  }, [token]);
 
   const handleProfileChange = (field, value) => {
     setProfile((prev) => ({
@@ -359,12 +385,33 @@ const SecuritySettings = ({ password, onChange, onSave }) => {
 
 const CompanySettings = ({ onSave }) => {
   const [company, setCompany] = useState({
-    name: "NGS Technologies",
-    email: "hr@ngstechnologies.com",
-    phone: "+91 98765 43210",
-    address: "Bengaluru, Karnataka, India",
-    workingHours: "9:00 AM - 6:00 PM",
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    workingHours: "",
   });
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    API.get("/auth/company-details", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((response) => {
+        const data = response?.data?.data || {};
+        setCompany({
+          name: data.companyName || "",
+          email: data.businessMail || "",
+          phone: data.mobile || "",
+          address: data.companyAddress || "",
+          workingHours: data.workingHours || "",
+        });
+      })
+      .catch((error) =>
+        console.error("Failed to fetch company settings:", error),
+      );
+  }, []);
 
   const handleChange = (field, value) => {
     setCompany((prev) => ({

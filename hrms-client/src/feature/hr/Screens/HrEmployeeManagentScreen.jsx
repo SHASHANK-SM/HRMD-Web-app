@@ -205,7 +205,8 @@ const HrEmployeeManagentScreen = () => {
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [page, search, department, status, departments, loadEmployees]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, search, department, status, departments]);
 
   useEffect(() => {
     setPage(1);

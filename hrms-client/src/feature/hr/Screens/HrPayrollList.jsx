@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
+import { API } from "../../../Core/url";
 import {
   Search,
   Download,
@@ -15,12 +17,13 @@ import {
 } from "lucide-react";
 
 const HrPayrollList = () => {
+  const { token } = useSelector((state) => state.auth);
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("All Departments");
   const [status, setStatus] = useState("All Status");
   const [selectedPayroll, setSelectedPayroll] = useState(null);
 
-  const [payrolls, setPayrolls] = useState([
+  const samplePayrolls = [
     {
       id: "PAY001",
       employee: "John Doe",
@@ -112,7 +115,36 @@ const HrPayrollList = () => {
       netSalary: 56000,
       status: "Pending",
     },
-  ]);
+  ];
+  const [payrolls, setPayrolls] = useState([]);
+
+  useEffect(() => {
+    if (!token) return;
+    API.get("/payroll", { headers: { Authorization: `Bearer ${token}` } })
+      .then((response) => {
+        const records = response?.data?.data || [];
+        setPayrolls(
+          records.map((record) => ({
+            id: record._id,
+            employee: record.empId?.name || "-",
+            employeeId: record.empId?.empId || record.empId || "-",
+            department: record.empId?.department?.title || "-",
+            designation: record.empId?.jobTitle || "-",
+            month: `${record.month || "-"} ${record.year || ""}`.trim(),
+            basic: Number(record.baseSalary || 0),
+            allowances:
+              Number(record.totalEarnings || record.grossSalary || 0) -
+              Number(record.baseSalary || 0),
+            deductions: Number(record.totalDeduction || 0),
+            netSalary: Number(record.netSalary || 0),
+            status: String(record.status || "pending").replace(/^./, (letter) =>
+              letter.toUpperCase(),
+            ),
+          })),
+        );
+      })
+      .catch((error) => console.error("Failed to fetch payroll:", error));
+  }, [token]);
 
   const filteredPayrolls = useMemo(() => {
     return payrolls.filter((payroll) => {
@@ -123,46 +155,37 @@ const HrPayrollList = () => {
         payroll.employeeId.toLowerCase().includes(searchText);
 
       const matchesDepartment =
-        department === "All Departments" ||
-        payroll.department === department;
+        department === "All Departments" || payroll.department === department;
 
       const matchesStatus =
-        status === "All Status" ||
-        payroll.status === status;
+        status === "All Status" || payroll.status === status;
 
       return matchesSearch && matchesDepartment && matchesStatus;
     });
   }, [payrolls, search, department, status]);
 
   const processedCount = payrolls.filter(
-    (item) => item.status === "Processed"
+    (item) => item.status === "Processed",
   ).length;
 
   const pendingCount = payrolls.filter(
-    (item) => item.status === "Pending"
+    (item) => item.status === "Pending",
   ).length;
 
-  const totalPayroll = payrolls.reduce(
-    (sum, item) => sum + item.netSalary,
-    0
-  );
+  const totalPayroll = payrolls.reduce((sum, item) => sum + item.netSalary, 0);
 
   const processPayroll = (id) => {
     setPayrolls((current) =>
       current.map((item) =>
-        item.id === id
-          ? { ...item, status: "Processed" }
-          : item
-      )
+        item.id === id ? { ...item, status: "Processed" } : item,
+      ),
     );
   };
 
   return (
     <div className="space-y-5">
-
       {/* PAGE HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
             Payroll Management
@@ -174,7 +197,6 @@ const HrPayrollList = () => {
         </div>
 
         <div className="flex items-center gap-2">
-
           <button
             type="button"
             className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50"
@@ -190,14 +212,11 @@ const HrPayrollList = () => {
             <WalletCards size={16} />
             Process Payroll
           </button>
-
         </div>
-
       </div>
 
       {/* SUMMARY CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-
         <PayrollSummary
           icon={WalletCards}
           label="Total Payroll"
@@ -225,21 +244,15 @@ const HrPayrollList = () => {
           value={processedCount}
           color="purple"
         />
-
       </div>
 
       {/* PAYROLL TABLE */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-
         {/* TABLE HEADER */}
         <div className="p-4 sm:p-5 border-b border-slate-100">
-
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-
             <div>
-              <h2 className="font-semibold text-slate-900">
-                Monthly Payroll
-              </h2>
+              <h2 className="font-semibold text-slate-900">Monthly Payroll</h2>
 
               <p className="text-xs text-slate-400 mt-1">
                 September 2026 payroll records
@@ -247,10 +260,8 @@ const HrPayrollList = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
-
               {/* SEARCH */}
               <div className="relative">
-
                 <Search
                   size={16}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -263,7 +274,6 @@ const HrPayrollList = () => {
                   placeholder="Search employee..."
                   className="w-full sm:w-56 h-10 pl-9 pr-3 rounded-lg border border-slate-200 bg-slate-50 text-sm outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
-
               </div>
 
               {/* DEPARTMENT */}
@@ -290,78 +300,46 @@ const HrPayrollList = () => {
                 <option>Processed</option>
                 <option>Pending</option>
               </select>
-
             </div>
-
           </div>
-
         </div>
 
         {/* TABLE */}
         <div className="overflow-x-auto">
-
           <table className="w-full min-w-[1050px]">
-
             <thead>
-
               <tr className="bg-slate-50 border-b border-slate-100">
+                <TableHeading>Employee</TableHeading>
 
-                <TableHeading>
-                  Employee
-                </TableHeading>
+                <TableHeading>Department</TableHeading>
 
-                <TableHeading>
-                  Department
-                </TableHeading>
+                <TableHeading>Basic Salary</TableHeading>
 
-                <TableHeading>
-                  Basic Salary
-                </TableHeading>
+                <TableHeading>Allowances</TableHeading>
 
-                <TableHeading>
-                  Allowances
-                </TableHeading>
+                <TableHeading>Deductions</TableHeading>
 
-                <TableHeading>
-                  Deductions
-                </TableHeading>
+                <TableHeading>Net Salary</TableHeading>
 
-                <TableHeading>
-                  Net Salary
-                </TableHeading>
+                <TableHeading>Status</TableHeading>
 
-                <TableHeading>
-                  Status
-                </TableHeading>
-
-                <TableHeading>
-                  Action
-                </TableHeading>
-
+                <TableHeading>Action</TableHeading>
               </tr>
-
             </thead>
 
             <tbody>
-
               {filteredPayrolls.length > 0 ? (
-
                 filteredPayrolls.map((payroll) => (
-
                   <tr
                     key={payroll.id}
                     className="border-b border-slate-100 hover:bg-slate-50 transition"
                   >
-
                     {/* EMPLOYEE */}
                     <td className="px-4 sm:px-5 py-4">
-
                       <div className="flex items-center gap-3">
-
                         <Avatar name={payroll.employee} />
 
                         <div>
-
                           <p className="text-sm font-semibold text-slate-800">
                             {payroll.employee}
                           </p>
@@ -369,16 +347,12 @@ const HrPayrollList = () => {
                           <p className="text-[11px] text-slate-400">
                             {payroll.employeeId}
                           </p>
-
                         </div>
-
                       </div>
-
                     </td>
 
                     {/* DEPARTMENT */}
                     <td className="px-4 py-4">
-
                       <p className="text-xs text-slate-700">
                         {payroll.department}
                       </p>
@@ -386,7 +360,6 @@ const HrPayrollList = () => {
                       <p className="text-[10px] text-slate-400 mt-0.5">
                         {payroll.designation}
                       </p>
-
                     </td>
 
                     {/* BASIC */}
@@ -406,11 +379,9 @@ const HrPayrollList = () => {
 
                     {/* NET */}
                     <td className="px-4 py-4">
-
                       <p className="text-sm font-semibold text-slate-900">
                         ₹{payroll.netSalary.toLocaleString("en-IN")}
                       </p>
-
                     </td>
 
                     {/* STATUS */}
@@ -420,15 +391,11 @@ const HrPayrollList = () => {
 
                     {/* ACTION */}
                     <td className="px-4 py-4">
-
                       <div className="flex items-center gap-1">
-
                         <button
                           type="button"
                           title="View payroll"
-                          onClick={() =>
-                            setSelectedPayroll(payroll)
-                          }
+                          onClick={() => setSelectedPayroll(payroll)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                         >
                           <Eye size={16} />
@@ -446,9 +413,7 @@ const HrPayrollList = () => {
                           <button
                             type="button"
                             title="Process payroll"
-                            onClick={() =>
-                              processPayroll(payroll.id)
-                            }
+                            onClick={() => processPayroll(payroll.id)}
                             className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 hover:bg-emerald-50"
                           >
                             <CheckCircle2 size={16} />
@@ -461,31 +426,16 @@ const HrPayrollList = () => {
                         >
                           <MoreHorizontal size={17} />
                         </button>
-
                       </div>
-
                     </td>
-
                   </tr>
-
                 ))
-
               ) : (
-
                 <tr>
-
-                  <td
-                    colSpan="8"
-                    className="py-12 text-center"
-                  >
-
+                  <td colSpan="8" className="py-12 text-center">
                     <div className="flex flex-col items-center">
-
                       <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                        <WalletCards
-                          size={20}
-                          className="text-slate-400"
-                        />
+                        <WalletCards size={20} className="text-slate-400" />
                       </div>
 
                       <p className="text-sm font-medium text-slate-700 mt-3">
@@ -495,26 +445,17 @@ const HrPayrollList = () => {
                       <p className="text-xs text-slate-400 mt-1">
                         Try changing your search or filters.
                       </p>
-
                     </div>
-
                   </td>
-
                 </tr>
-
               )}
-
             </tbody>
-
           </table>
-
         </div>
 
         {/* FOOTER */}
         <div className="px-4 sm:px-5 py-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-
           <p className="text-xs text-slate-400">
-
             Showing{" "}
             <span className="font-medium text-slate-600">
               {filteredPayrolls.length}
@@ -524,11 +465,9 @@ const HrPayrollList = () => {
               {payrolls.length}
             </span>{" "}
             employees
-
           </p>
 
           <div className="flex items-center gap-1">
-
             <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50">
               <ChevronLeft size={16} />
             </button>
@@ -544,11 +483,8 @@ const HrPayrollList = () => {
             <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50">
               <ChevronRight size={16} />
             </button>
-
           </div>
-
         </div>
-
       </div>
 
       {/* DETAILS MODAL */}
@@ -558,11 +494,9 @@ const HrPayrollList = () => {
           onClose={() => setSelectedPayroll(null)}
         />
       )}
-
     </div>
   );
 };
-
 
 /* =========================================================
    SUMMARY
@@ -575,7 +509,6 @@ const PayrollSummary = ({
   value,
   color,
 }) => {
-
   const styles = {
     blue: "bg-blue-50 text-blue-600",
     emerald: "bg-emerald-50 text-emerald-600",
@@ -585,25 +518,18 @@ const PayrollSummary = ({
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-
       <div
         className={`w-9 h-9 rounded-lg flex items-center justify-center ${styles[color]}`}
       >
         <Icon size={18} />
       </div>
 
-      <p className="text-xs text-slate-500 mt-3">
-        {label}
-      </p>
+      <p className="text-xs text-slate-500 mt-3">{label}</p>
 
-      <p className="text-xl font-bold text-slate-900 mt-1">
-        {value}
-      </p>
-
+      <p className="text-xl font-bold text-slate-900 mt-1">{value}</p>
     </div>
   );
 };
-
 
 /* =========================================================
    TABLE HEADING
@@ -615,13 +541,11 @@ const TableHeading = ({ children }) => (
   </th>
 );
 
-
 /* =========================================================
    AVATAR
 ========================================================= */
 
 const Avatar = ({ name }) => {
-
   const initials = name
     .split(" ")
     .map((word) => word[0])
@@ -634,13 +558,11 @@ const Avatar = ({ name }) => {
   );
 };
 
-
 /* =========================================================
    STATUS
 ========================================================= */
 
 const PayrollStatus = ({ status }) => {
-
   if (status === "Processed") {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-medium">
@@ -658,28 +580,18 @@ const PayrollStatus = ({ status }) => {
   );
 };
 
-
 /* =========================================================
    DETAILS MODAL
 ========================================================= */
 
-const PayrollDetailsModal = ({
-  payroll,
-  onClose,
-}) => {
-
+const PayrollDetailsModal = ({ payroll, onClose }) => {
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/50 flex items-center justify-center p-4">
-
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden">
-
         {/* HEADER */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-
           <div>
-            <h2 className="font-semibold text-slate-900">
-              Payroll Details
-            </h2>
+            <h2 className="font-semibold text-slate-900">Payroll Details</h2>
 
             <p className="text-xs text-slate-400 mt-1">
               {payroll.month} • {payroll.id}
@@ -692,19 +604,15 @@ const PayrollDetailsModal = ({
           >
             <X size={18} />
           </button>
-
         </div>
 
         {/* CONTENT */}
         <div className="p-5">
-
           {/* EMPLOYEE */}
           <div className="flex items-center gap-3 pb-5 border-b border-slate-100">
-
             <Avatar name={payroll.employee} />
 
             <div>
-
               <p className="text-sm font-semibold text-slate-800">
                 {payroll.employee}
               </p>
@@ -712,14 +620,11 @@ const PayrollDetailsModal = ({
               <p className="text-xs text-slate-400">
                 {payroll.employeeId} • {payroll.department}
               </p>
-
             </div>
-
           </div>
 
           {/* SALARY */}
           <div className="mt-5 space-y-3">
-
             <SalaryRow
               label="Basic Salary"
               value={`₹${payroll.basic.toLocaleString("en-IN")}`}
@@ -738,7 +643,6 @@ const PayrollDetailsModal = ({
             />
 
             <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
-
               <span className="text-sm font-semibold text-slate-800">
                 Net Salary
               </span>
@@ -746,62 +650,44 @@ const PayrollDetailsModal = ({
               <span className="text-lg font-bold text-blue-600">
                 ₹{payroll.netSalary.toLocaleString("en-IN")}
               </span>
-
             </div>
-
           </div>
-
         </div>
 
         {/* FOOTER */}
         <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
-
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50"
           >
             Close
           </button>
-
         </div>
-
       </div>
-
     </div>
   );
 };
-
 
 /* =========================================================
    SALARY ROW
 ========================================================= */
 
-const SalaryRow = ({
-  label,
-  value,
-  positive,
-  negative,
-}) => {
-
+const SalaryRow = ({ label, value, positive, negative }) => {
   return (
     <div className="flex items-center justify-between">
-
-      <span className="text-sm text-slate-500">
-        {label}
-      </span>
+      <span className="text-sm text-slate-500">{label}</span>
 
       <span
         className={`text-sm font-medium ${
           positive
             ? "text-emerald-600"
             : negative
-            ? "text-red-500"
-            : "text-slate-800"
+              ? "text-red-500"
+              : "text-slate-800"
         }`}
       >
         {value}
       </span>
-
     </div>
   );
 };

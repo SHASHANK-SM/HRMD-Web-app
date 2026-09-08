@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
+import { API } from "../../../Core/url";
 import {
   Bell,
   CheckCircle2,
@@ -12,7 +14,8 @@ import {
 } from "lucide-react";
 
 const HrNotificationsScreen = () => {
-  const [notifications, setNotifications] = useState([
+  const { token } = useSelector((state) => state.auth);
+  const sampleNotifications = [
     {
       id: 1,
       title: "New Leave Request",
@@ -80,7 +83,37 @@ const HrNotificationsScreen = () => {
       time: "11:00 AM",
       read: true,
     },
-  ]);
+  ];
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    if (!token) return;
+    API.get("/notifications", { headers: { Authorization: `Bearer ${token}` } })
+      .then((response) => {
+        const records = response?.data?.data || [];
+        setNotifications(
+          records.map((item) => ({
+            id: item._id,
+            title: item.title || item.subject || "Notification",
+            message: item.message || item.body || "",
+            type: item.type || "employee",
+            date: item.createdAt
+              ? new Date(item.createdAt).toLocaleDateString("en-IN")
+              : "-",
+            time: item.createdAt
+              ? new Date(item.createdAt).toLocaleTimeString("en-IN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "-",
+            read: Boolean(item.read),
+          })),
+        );
+      })
+      .catch((error) =>
+        console.error("Failed to fetch HR notifications:", error),
+      );
+  }, [token]);
 
   const [selectedFilter, setSelectedFilter] = useState("All");
 
@@ -100,7 +133,12 @@ const HrNotificationsScreen = () => {
     return notifications;
   }, [notifications, selectedFilter]);
 
-  const markAsRead = (id) => {
+  const markAsRead = async (id) => {
+    await API.patch(
+      `/notifications/${id}/read`,
+      {},
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
     setNotifications((prev) =>
       prev.map((notification) =>
         notification.id === id ? { ...notification, read: true } : notification,
@@ -108,12 +146,14 @@ const HrNotificationsScreen = () => {
     );
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    await API.patch(
+      "/notifications/read-all",
+      {},
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
     setNotifications((prev) =>
-      prev.map((notification) => ({
-        ...notification,
-        read: true,
-      })),
+      prev.map((notification) => ({ ...notification, read: true })),
     );
   };
 
