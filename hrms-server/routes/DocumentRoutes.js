@@ -1,0 +1,13 @@
+import { Router } from "express";
+import checkUser from "../middlewares/CkeckUser.js";
+import allowRole from "../middlewares/AllowRole.js";
+import upload from "../lib/multerConfig.js";
+import { uploadDocument, listDocuments, downloadDocument, replaceDocument, deleteDocument } from "../controllers/DocumentController.js";
+const router=Router();
+router.post("/",checkUser,allowRole("hr","employee","manager"),upload.single("file"),uploadDocument);
+router.get("/my",checkUser,listDocuments);
+router.get("/employee/:userId",checkUser,allowRole("hr"),listDocuments);
+router.get("/:id/download",checkUser,downloadDocument);
+router.put("/:id",checkUser,upload.single("file"),replaceDocument);
+router.delete("/:id",checkUser,deleteDocument);
+export default router;

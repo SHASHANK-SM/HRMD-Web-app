@@ -1,0 +1,13 @@
+import { Router } from "express";
+import checkUser from "../middlewares/CkeckUser.js";
+import allowRole from "../middlewares/AllowRole.js";
+import { employeeReport, attendanceReport, leaveReport, payrollReport, overtimeReport, absenceLateReport } from "../controllers/ReportController.js";
+const router=Router();
+router.use(checkUser,allowRole("hr"));
+router.get("/employees",employeeReport);
+router.get("/attendance",attendanceReport);
+router.get("/leave",leaveReport);
+router.get("/payroll",payrollReport);
+router.get("/overtime",overtimeReport);
+router.get("/late-absence",absenceLateReport);
+export default router;

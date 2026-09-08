@@ -1,0 +1,12 @@
+import { Router } from "express";
+import checkUser from "../middlewares/CkeckUser.js";
+import allowRole from "../middlewares/AllowRole.js";
+import { checkIn, checkOut, today, history, monthlySummary, hrAttendance } from "../controllers/AttendanceController.js";
+const router=Router();
+router.post("/check-in",checkUser,allowRole("employee","manager"),checkIn);
+router.post("/check-out",checkUser,allowRole("employee","manager"),checkOut);
+router.get("/today",checkUser,today);
+router.get("/history",checkUser,history);
+router.get("/monthly-summary",checkUser,monthlySummary);
+router.get("/hr",checkUser,allowRole("hr"),hrAttendance);
+export default router;

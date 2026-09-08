@@ -1,0 +1,12 @@
+import { Router } from "express";
+import checkUser from "../middlewares/CkeckUser.js";
+import allowRole from "../middlewares/AllowRole.js";
+import upload from "../lib/multerConfig.js";
+import { applyLeave, listMyLeaves, balance, listHrLeaves, reviewLeave } from "../controllers/LeaveController.js";
+const router=Router();
+router.post("/",checkUser,allowRole("employee","manager"),upload.single("document"),applyLeave);
+router.get("/",checkUser,allowRole("employee","manager"),listMyLeaves);
+router.get("/balance",checkUser,allowRole("employee","manager"),balance);
+router.get("/hr",checkUser,allowRole("hr"),listHrLeaves);
+router.patch("/:id/review",checkUser,allowRole("hr"),reviewLeave);
+export default router;

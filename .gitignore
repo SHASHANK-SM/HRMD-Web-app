@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Diagnostic logs
+hrms-server/logs/
+
+# Dependency directories
+node_modules/
+hrms-client/node_modules/
+hrms-server/node_modules/
+
+# Environment files
+.env
+.env.production
+.env.local
+.env.*.local
+hrms-server/.env
+
+# Build outputs
+dist/
+build/
+hrms-client/dist/
+
+# Uploads & Temp files
+hrms-server/uploads/*
+!hrms-server/uploads/.gitkeep
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.zip

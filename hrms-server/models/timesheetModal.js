@@ -1,0 +1,4 @@
+import mongoose from "mongoose";
+const schema = new mongoose.Schema({ workHours: { type: Number, default: 0, min: 0 }, breakHours: { type: Number, default: 0, min: 0 }, overTime: { type: Number, default: 0, min: 0 }, timeOff: { type: Number, default: 0, min: 0 }, day: { type: String, enum: ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] }, date: { type: String, default: null }, week: { type: String, default: null }, user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true }, hrId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true }, month: { type: Number, default: () => new Date().getMonth() + 1 }, year: { type: Number, default: () => new Date().getFullYear() }, approved: { type: Boolean, default: false } }, { timestamps: true });
+schema.index({ user: 1, date: 1 }, { unique: true, sparse: true });
+export default mongoose.model("timesheet", schema);

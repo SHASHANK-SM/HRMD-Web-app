@@ -1,0 +1,12 @@
+import { Router } from "express";
+import checkUser from "../middlewares/CkeckUser.js";
+import allowRole from "../middlewares/AllowRole.js";
+import { createPayroll, listPayroll, getPayroll, getPayslip } from "../controllers/PayrollController.js";
+import { downloadPayslipPdf } from "../controllers/PayslipPdfController.js";
+const router=Router();
+router.post("/",checkUser,allowRole("hr"),createPayroll);
+router.get("/",checkUser,allowRole("hr"),listPayroll);
+router.get("/my",checkUser,allowRole("employee","manager"),getPayroll);
+router.get("/payslips/:id",checkUser,getPayslip);
+router.get("/payslips/:id/pdf",checkUser,downloadPayslipPdf);
+export default router;
