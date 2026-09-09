@@ -267,32 +267,6 @@ app.use(errorHandler);
 // DATABASE + SERVER STARTUP
 // ======================================================
 
-const startServer = async () => {
-  try {
-    if (!process.env.JWT_SECRET) {
-      throw new Error("JWT_SECRET is not defined in environment variables");
-    }
-
-    await connectDB(process.env.MONGO_URI);
-
-    if (process.env.SEED_DEMO_USERS === "true") {
-      await ensureDemoUsers();
-    }
-
-    app.listen(PORT, () => {
-      console.log(`HRMS server running on port ${PORT}`);
-
-      console.log(`API: http://localhost:${PORT}`);
-
-      console.log(`Health: http://localhost:${PORT}/health`);
-    });
-  } catch (error) {
-    console.error("Server startup failed:", error);
-
-    process.exit(1);
-  }
-};
-
 const ensureDemoUsers = async () => {
   try {
     const userCount = await User.countDocuments();
@@ -325,10 +299,45 @@ const ensureDemoUsers = async () => {
     });
 
     console.log("Demo HR and employee users created successfully.");
-    console.log("HR login: HR001 / Admin@123");
-    console.log("Employee login: EMP001 / Emp@123");
   } catch (error) {
     console.error("Demo user seeding failed:", error);
+  }
+};
+
+const startServer = async () => {
+  try {
+    console.log("Starting HRMS server...");
+    console.log(`Environment: ${process.env.NODE_ENV}`);
+    console.log(`MongoDB URI configured: ${Boolean(process.env.MONGO_URI)}`);
+
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is not defined in environment variables");
+    }
+
+    console.log("Connecting to MongoDB...");
+
+    await connectDB(process.env.MONGO_URI);
+
+    console.log("MongoDB connection completed.");
+
+    if (process.env.SEED_DEMO_USERS === "true") {
+      await ensureDemoUsers();
+    }
+
+    app.listen(PORT, () => {
+      console.log("========================================");
+      console.log(`HRMS server running on port ${PORT}`);
+      console.log(`API: http://localhost:${PORT}`);
+      console.log(`Health: http://localhost:${PORT}/health`);
+      console.log("========================================");
+    });
+  } catch (error) {
+    console.error("========================================");
+    console.error("SERVER STARTUP FAILED");
+    console.error(error);
+    console.error("========================================");
+
+    process.exit(1);
   }
 };
 
@@ -337,7 +346,11 @@ const ensureDemoUsers = async () => {
 // ======================================================
 
 if (process.env.NODE_ENV !== "test") {
-  startServer();
+  startServer().catch((error) => {
+    console.error("Unhandled startup error:", error);
+    process.exit(1);
+  });
 }
 
 export default app;
+

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { API } from "../../../Core/url";
 import {
   Users,
@@ -23,6 +24,7 @@ import {
 
 const HrDashboard = () => {
   const { token } = useSelector((state) => state.auth);
+  const navigate = useNavigate();
   const [metrics, setMetrics] = useState({
     totalEmployees: 0,
     activeEmployees: 0,
@@ -131,36 +133,42 @@ const HrDashboard = () => {
       icon: UserRoundPlus,
       color: "text-blue-600",
       bg: "bg-blue-50",
+      path: "/employees-details",
     },
     {
       label: "Manage Leaves",
       icon: CalendarDays,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
+      path: "/hr-leave-management",
     },
     {
       label: "Payroll",
       icon: WalletCards,
       color: "text-amber-600",
       bg: "bg-amber-50",
+      path: "/hr-payroll-management",
     },
     {
       label: "Reports",
       icon: BarChart3,
       color: "text-violet-600",
       bg: "bg-violet-50",
+      path: "/hr-reports",
     },
     {
       label: "Attendance",
       icon: CalendarCheck,
       color: "text-cyan-600",
       bg: "bg-cyan-50",
+      path: "/hr-attendance",
     },
     {
       label: "Payslips",
       icon: FileText,
       color: "text-rose-600",
       bg: "bg-rose-50",
+      path: "/hr-payslips",
     },
   ];
   const maxAttendance = Math.max(metrics.activeEmployees, 1);
@@ -395,7 +403,8 @@ const HrDashboard = () => {
               return (
                 <button
                   key={action.label}
-                  className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors"
+                  onClick={() => navigate(action.path)}
+                  className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   <div
                     className={`w-9 h-9 rounded-lg ${action.bg} flex items-center justify-center`}
