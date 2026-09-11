@@ -12,12 +12,15 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Search,
 } from "lucide-react";
 import { API } from "../../../Core/url";
 
 const EmpLeavesScreen = () => {
   const { token } = useSelector((state) => state.auth);
   const [showApplyModal, setShowApplyModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [formData, setFormData] = useState({
     leaveType: "",
@@ -70,8 +73,10 @@ const EmpLeavesScreen = () => {
   const fetchLeaves = async () => {
     if (!token) return;
     try {
+      const params = { page: 1, limit: 100 };
+      if (debouncedSearch) params.search = debouncedSearch;
       const [leavesResponse, balanceResponse] = await Promise.all([
-        API.get("/leaves", { ...authConfig, params: { page: 1, limit: 100 } }),
+        API.get("/leaves", { ...authConfig, params }),
         API.get("/leaves/balance", authConfig),
       ]);
       setLeaveRequests((leavesResponse?.data?.data || []).map(formatLeave));
@@ -86,6 +91,17 @@ const EmpLeavesScreen = () => {
   useEffect(() => {
     fetchLeaves();
   }, [token]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    fetchLeaves();
+  }, [debouncedSearch, token]);
 
   const duration = useMemo(() => {
     if (!formData.startDate || !formData.endDate) {
@@ -227,14 +243,30 @@ const EmpLeavesScreen = () => {
 
       {/* Leave History */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div className="flex flex-col gap-1 border-b border-slate-100 px-5 py-4 sm:px-6">
-          <h3 className="text-base font-semibold text-slate-900">
-            Leave History
-          </h3>
+        <div className="flex flex-col gap-1 border-b border-slate-100 px-5 py-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Leave History
+            </h3>
 
-          <p className="text-xs text-slate-500">
-            View your submitted leave requests and their status.
-          </p>
+            <p className="text-xs text-slate-500">
+              View your submitted leave requests and their status.
+            </p>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search
+              size={18}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search leave type, reason..."
+              className="h-10 w-full pl-10 pr-4 rounded-lg border border-slate-200 bg-slate-50 text-sm outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
         </div>
 
         <div className="overflow-x-auto">

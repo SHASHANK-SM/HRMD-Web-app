@@ -337,6 +337,15 @@ export const listMyLeaves = async (req, res, next) => {
       user: req.user._id,
     };
 
+    // Search
+    if (req.query.search?.trim()) {
+      const search = escapeRegex(req.query.search.trim());
+      query.$or = [
+        { leaveType: { $regex: search, $options: "i" } },
+        { reason: { $regex: search, $options: "i" } },
+      ];
+    }
+
     // Status filter
     if (req.query.status) {
       if (!LEAVE_STATUSES.has(req.query.status)) {

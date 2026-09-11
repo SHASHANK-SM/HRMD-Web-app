@@ -21,7 +21,16 @@ export const uploadDocument = async (req, res) => {
 export const listDocuments = async (req, res) => {
   const userId = req.user.role === "hr" ? req.params.userId : req.user._id;
   if (!await ownerOrHr(req, userId)) return failure(res, 403, "You cannot view these documents");
-  const query = { userId }; if (req.query.documentType) query.documentType = req.query.documentType;
+  const query = { userId };
+  if (req.query.documentType) query.documentType = req.query.documentType;
+  if (req.query.search?.trim()) {
+    const search = req.query.search.trim();
+    query.$or = [
+      { documentName: { $regex: search, $options: "i" } },
+      { originalName: { $regex: search, $options: "i" } },
+      { documentType: { $regex: search, $options: "i" } },
+    ];
+  }
   const data = await Document.find(query).sort({ createdAt: -1 }).lean();
   return success(res, { data });
 };

@@ -10,6 +10,7 @@ import {
   X,
   Printer,
   CheckCircle2,
+  Search,
 } from "lucide-react";
 import { useSelector } from "react-redux";
 import { API } from "../../../Core/url";
@@ -25,6 +26,8 @@ const EmpPayslipScreen = () => {
     department: "",
     designation: "",
   });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const authConfig = {
     headers: {
@@ -184,7 +187,12 @@ const EmpPayslipScreen = () => {
 
   const fetchPayslips = async () => {
     try {
-      const response = await API.get("/payroll/my", authConfig);
+      const params = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      const response = await API.get("/payroll/my", {
+        ...authConfig,
+        params,
+      });
 
       const data = response?.data;
 
@@ -239,6 +247,19 @@ const EmpPayslipScreen = () => {
       fetchPayslips();
     }
   }, [token]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (token) {
+      fetchPayslips();
+    }
+  }, [debouncedSearch, token]);
 
   const fetchPayslipDetails = async (payslip) => {
     if (!payslip?.id) {
@@ -384,14 +405,30 @@ const EmpPayslipScreen = () => {
 
       {/* Payslip History */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div className="flex flex-col gap-1 border-b border-slate-100 px-5 py-4 sm:px-6">
-          <h3 className="text-base font-semibold text-slate-900">
-            Payslip History
-          </h3>
+        <div className="flex flex-col gap-1 border-b border-slate-100 px-5 py-4 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Payslip History
+            </h3>
 
-          <p className="text-xs text-slate-500">
-            Access your previous monthly payslips.
-          </p>
+            <p className="text-xs text-slate-500">
+              Access your previous monthly payslips.
+            </p>
+          </div>
+
+          <div className="relative w-full sm:w-64">
+            <Search
+              size={18}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search month..."
+              className="h-10 w-full pl-10 pr-4 rounded-lg border border-slate-200 bg-slate-50 text-sm outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
         </div>
 
         <div className="overflow-x-auto">

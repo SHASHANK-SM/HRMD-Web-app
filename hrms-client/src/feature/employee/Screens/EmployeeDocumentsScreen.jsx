@@ -22,6 +22,7 @@ const EmployeeDocumentsScreen = () => {
 
   const [documents, setDocuments] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedType, setSelectedType] = useState("All");
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -110,7 +111,14 @@ const EmployeeDocumentsScreen = () => {
     try {
       setLoading(true);
 
-      const response = await API.get("/documents/my", authConfig);
+      const params = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (selectedType !== "All") params.documentType = selectedType;
+
+      const response = await API.get("/documents/my", {
+        ...authConfig,
+        params,
+      });
 
       const data = response?.data?.data ?? response?.data ?? [];
 
@@ -132,20 +140,18 @@ const EmployeeDocumentsScreen = () => {
     fetchDocuments();
   }, [token]);
 
-  const filteredDocuments = useMemo(() => {
-    return documents.filter((document) => {
-      const search = searchTerm.toLowerCase();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-      const matchesSearch =
-        document.name.toLowerCase().includes(search) ||
-        document.fileName.toLowerCase().includes(search);
+  useEffect(() => {
+    fetchDocuments();
+  }, [debouncedSearch, selectedType, token]);
 
-      const matchesType =
-        selectedType === "All" || document.type === selectedType;
-
-      return matchesSearch && matchesType;
-    });
-  }, [documents, searchTerm, selectedType]);
+  const filteredDocuments = useMemo(() => documents, [documents]);
 
   const verifiedCount = documents.filter(
     (doc) => doc.status === "Verified",

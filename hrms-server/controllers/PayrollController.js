@@ -46,6 +46,12 @@ export const getPayroll = async (req, res) => {
   const query = { empId: employee._id };
   if (req.query.month) query.month = String(req.query.month).toLowerCase();
   if (req.query.year) query.year = Number(req.query.year);
+  if (req.query.search?.trim()) {
+    const search = req.query.search.trim();
+    query.$or = [
+      { month: { $regex: search, $options: "i" } },
+    ];
+  }
   const data = await Payslip.find(query).sort({ year: -1, createdAt: -1 }).lean();
   return success(res, { data });
 };

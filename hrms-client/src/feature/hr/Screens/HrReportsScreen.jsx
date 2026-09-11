@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { API } from "../../../Core/url";
+import { errorMsgApi } from "../../../Core/toasts";
 import {
   BarChart3,
   CalendarDays,
@@ -19,6 +20,50 @@ const HrReportsScreen = () => {
   const [department, setDepartment] = useState("All Departments");
   const [showReport, setShowReport] = useState(false);
   const [liveReportRows, setLiveReportRows] = useState([]);
+
+  const parsePeriod = (periodStr) => {
+    const [month, year] = periodStr.split(" ");
+    const monthMap = {
+      January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
+      July: 7, August: 8, September: 9, October: 10, November: 11, December: 12,
+    };
+    return { month: monthMap[month], year: parseInt(year) };
+  };
+
+  const handleExport = async () => {
+    if (!token) return;
+    const endpoint =
+      reportType === "Attendance"
+        ? "attendance"
+        : reportType === "Leave"
+          ? "leave"
+          : "payroll";
+    const { month, year } = parsePeriod(period);
+    try {
+      const params = { export: "csv" };
+      if (month) params.month = month;
+      if (year) params.year = year;
+      if (department !== "All Departments") params.department = department;
+
+      const response = await API.get(`/reports/${endpoint}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = `${endpoint}-report-${Date.now()}.csv`;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to export report");
+    }
+  };
 
   const attendanceData = [
     {
@@ -310,7 +355,10 @@ const HrReportsScreen = () => {
             Generate Report
           </button>
 
-          <button className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
             <Download size={17} />
             Export Report
           </button>
@@ -434,7 +482,10 @@ const HrReportsScreen = () => {
             </p>
           </div>
 
-          <button className="inline-flex items-center justify-center gap-2 self-start rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 sm:self-auto">
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center justify-center gap-2 self-start rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 sm:self-auto"
+          >
             <Download size={15} />
             Download
           </button>

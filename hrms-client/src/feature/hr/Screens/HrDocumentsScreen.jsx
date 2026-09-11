@@ -85,6 +85,43 @@ const HrDocumentsScreen = () => {
     new Set(),
   );
 
+  const handleExport = async () => {
+    try {
+      const params = { export: "csv" };
+      if (search) params.search = search;
+      if (typeFilter !== "All Types") {
+        // Map display type to backend documentType values
+        const typeMap = {
+          Employment: "offer-joining",
+          Identity: "id-proof",
+          Education: "certificate",
+          Financial: "other",
+        };
+        params.documentType = typeMap[typeFilter];
+      }
+      if (statusFilter !== "All Status") {
+        params.status = statusFilter.toLowerCase();
+      }
+
+      const response = await API.get("/reports/employees", {
+        params,
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = `documents-report-${Date.now()}.csv`;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to export documents");
+    }
+  };
+
   useEffect(() => {
     loadDocuments();
     loadEmployees();
@@ -318,13 +355,23 @@ const HrDocumentsScreen = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowUploadModal(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-        >
-          <Upload size={17} />
-          Upload Document
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50"
+          >
+            <Download size={16} />
+            Export
+          </button>
+
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+          >
+            <Upload size={17} />
+            Upload Document
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}

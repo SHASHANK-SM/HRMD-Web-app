@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { API } from "../../../Core/url";
+import { errorMsgApi } from "../../../Core/toasts";
 import {
   Search,
   Download,
@@ -14,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Plus,
 } from "lucide-react";
 
 const HrPayrollList = () => {
@@ -22,6 +24,151 @@ const HrPayrollList = () => {
   const [department, setDepartment] = useState("All Departments");
   const [status, setStatus] = useState("All Status");
   const [selectedPayroll, setSelectedPayroll] = useState(null);
+
+  const handleExport = async () => {
+    if (!token) return;
+    try {
+      const params = { export: "csv" };
+      if (search) params.search = search;
+      if (department !== "All Departments") params.department = department;
+      if (status !== "All Status") params.status = status.toLowerCase();
+
+      const response = await API.get("/reports/payroll", {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = `payroll-report-${Date.now()}.csv`;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to export payroll");
+    }
+  };
+
+  const [showProcessModal, setShowProcessModal] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [processForm, setProcessForm] = useState({
+    month: "",
+    year: new Date().getFullYear().toString(),
+    employeeIds: [],
+  });
+
+  useEffect(() => {
+    if (!token) return;
+    const fetchEmployees = async () => {
+      try {
+        const response = await API.get("/employees", {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { page: 1, limit: 200 },
+        });
+        setEmployees(response?.data?.data || []);
+      } catch (error) {
+        console.error("Failed to fetch employees:", error);
+      }
+    };
+    fetchEmployees();
+  }, [token]);
+
+  const handleProcessPayroll = async (e) => {
+    e.preventDefault();
+    if (!token || processing) return;
+
+    if (!processForm.month || processForm.employeeIds.length === 0) {
+      errorMsgApi("Please select month and at least one employee");
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const empId of processForm.employeeIds) {
+        try {
+          const employee = employees.find((e) => e._id === empId);
+          if (!employee) continue;
+
+          // Use employee's salary data if available, otherwise use defaults
+          const payload = {
+            empId,
+            month: processForm.month,
+            year: parseInt(processForm.year) || new Date().getFullYear(),
+            baseSalary: employee.salary?.base || 0,
+            hra: employee.salary?.hra || 0,
+            conveyance: employee.salary?.conveyance || 0,
+            specialAllowance: employee.salary?.specialAllowance || 0,
+            bonus: 0,
+            overtime: 0,
+            professionalTax: 0,
+            pf: 0,
+            tds: 0,
+            otherDeductions: 0,
+            calendarDays: 0,
+            paidDays: 0,
+            lossDays: 0,
+          };
+
+          await API.post("/payroll", payload, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          successCount++;
+        } catch (err) {
+          failCount++;
+          console.error(`Failed to process payroll for ${empId}:`, err);
+        }
+      }
+
+      errorMsgApi(
+        `Payroll processed: ${successCount} success, ${failCount} failed`,
+        failCount > 0 ? "error" : "success"
+      );
+
+      setShowProcessModal(false);
+      setProcessForm({
+        month: "",
+        year: new Date().getFullYear().toString(),
+        employeeIds: [],
+      });
+
+      // Refresh the payroll list
+      const response = await API.get("/payroll", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const records = response?.data?.data || [];
+      setPayrolls(
+        records.map((record) => ({
+          id: record._id,
+          employee: record.empId?.name || "-",
+          employeeId: record.empId?.empId || record.empId || "-",
+          department: record.empId?.department?.title || "-",
+          designation: record.empId?.jobTitle || "-",
+          month: `${record.month || "-"} ${record.year || ""}`.trim(),
+          basic: Number(record.baseSalary || 0),
+          allowances:
+            Number(record.totalEarnings || record.grossSalary || 0) -
+            Number(record.baseSalary || 0),
+          deductions: Number(record.totalDeduction || 0),
+          netSalary: Number(record.netSalary || 0),
+          status: String(record.status || "pending").replace(/^./, (letter) =>
+            letter.toUpperCase(),
+          ),
+        })),
+      );
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to process payroll");
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const samplePayrolls = [
     {
@@ -174,14 +321,6 @@ const HrPayrollList = () => {
 
   const totalPayroll = payrolls.reduce((sum, item) => sum + item.netSalary, 0);
 
-  const processPayroll = (id) => {
-    setPayrolls((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, status: "Processed" } : item,
-      ),
-    );
-  };
-
   return (
     <div className="space-y-5">
       {/* PAGE HEADER */}
@@ -199,6 +338,7 @@ const HrPayrollList = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={handleExport}
             className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50"
           >
             <Download size={16} />
@@ -207,6 +347,7 @@ const HrPayrollList = () => {
 
           <button
             type="button"
+            onClick={() => setShowProcessModal(true)}
             className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
           >
             <WalletCards size={16} />
@@ -409,17 +550,6 @@ const HrPayrollList = () => {
                           <FileText size={16} />
                         </button>
 
-                        {payroll.status === "Pending" && (
-                          <button
-                            type="button"
-                            title="Process payroll"
-                            onClick={() => processPayroll(payroll.id)}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 hover:bg-emerald-50"
-                          >
-                            <CheckCircle2 size={16} />
-                          </button>
-                        )}
-
                         <button
                           type="button"
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"
@@ -492,6 +622,18 @@ const HrPayrollList = () => {
         <PayrollDetailsModal
           payroll={selectedPayroll}
           onClose={() => setSelectedPayroll(null)}
+        />
+      )}
+
+      {/* PROCESS PAYROLL MODAL */}
+      {showProcessModal && (
+        <ProcessPayrollModal
+          employees={employees}
+          onClose={() => setShowProcessModal(false)}
+          onSubmit={handleProcessPayroll}
+          processing={processing}
+          form={processForm}
+          setForm={setProcessForm}
         />
       )}
     </div>
@@ -669,25 +811,121 @@ const PayrollDetailsModal = ({ payroll, onClose }) => {
 };
 
 /* =========================================================
-   SALARY ROW
+   PROCESS PAYROLL MODAL
 ========================================================= */
 
-const SalaryRow = ({ label, value, positive, negative }) => {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-slate-500">{label}</span>
+const ProcessPayrollModal = ({
+  employees,
+  onClose,
+  onSubmit,
+  processing,
+  form,
+  setForm,
+}) => {
+  const monthOptions = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
 
-      <span
-        className={`text-sm font-medium ${
-          positive
-            ? "text-emerald-600"
-            : negative
-              ? "text-red-500"
-              : "text-slate-800"
-        }`}
-      >
-        {value}
-      </span>
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-900/50 flex items-center justify-center p-4">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
+        {/* Header */}
+        <div className="sticky top-0 bg-white px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-900">Process Payroll</h2>
+            <p className="text-xs text-slate-400 mt-1">Create payroll records for selected employees</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={onSubmit} className="p-5 space-y-4">
+          {/* Month & Year */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Month *</label>
+              <select
+                value={form.month}
+                onChange={(e) => setForm({ ...form, month: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                required
+              >
+                <option value="">Select month</option>
+                {monthOptions.map((m) => (
+                  <option key={m} value={m.toLowerCase()}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Year *</label>
+              <input
+                type="number"
+                value={form.year}
+                onChange={(e) => setForm({ ...form, year: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                min="2020"
+                max="2030"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Employee Selection */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Employees *</label>
+            <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-xl p-3 space-y-2">
+              {employees.map((emp) => (
+                <label key={emp._id} className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    value={emp._id}
+                    checked={form.employeeIds.includes(emp._id)}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        employeeIds: e.target.checked
+                          ? [...form.employeeIds, emp._id]
+                          : form.employeeIds.filter((id) => id !== emp._id),
+                      })
+                    }
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-slate-700">
+                    {emp.name} ({emp.empId}) - {emp.jobTitle || emp.designation || "-"}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              {form.employeeIds.length} employee(s) selected
+            </p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={processing}
+              className="h-11 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {processing ? "Processing..." : "Process Payroll"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

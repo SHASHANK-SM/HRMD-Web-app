@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Search,
   Plus,
@@ -115,7 +116,9 @@ const normalizeEmployee = (employee) => ({
 });
 
 const HrEmployeeManagentScreen = () => {
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [search, setSearch] = useState(() => searchParams.get("search") || "");
   const [department, setDepartment] = useState("All Departments");
   const [status, setStatus] = useState("All Status");
   const [showFilters, setShowFilters] = useState(false);
@@ -211,6 +214,16 @@ const HrEmployeeManagentScreen = () => {
   useEffect(() => {
     setPage(1);
   }, [search, department, status]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    if (search) {
+      params.set("search", search);
+    } else {
+      params.delete("search");
+    }
+    setSearchParams(params, { replace: true });
+  }, [search, searchParams, setSearchParams]);
 
   const filteredEmployees = useMemo(() => employees, [employees]);
 

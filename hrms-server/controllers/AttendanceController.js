@@ -109,7 +109,7 @@ export const today = async (req, res) =>
   });
 
 export const history = async (req, res) => {
-  const { startDate, endDate, status, month } = req.query;
+  const { startDate, endDate, status, month, search } = req.query;
   const { page, limit } = parsePage(req.query);
   const query = { user: req.user._id };
 
@@ -122,6 +122,14 @@ export const history = async (req, res) => {
   }
 
   if (status) query.status = status;
+
+  if (search?.trim()) {
+    const searchTerm = search.trim();
+    query.$or = [
+      { date: { $regex: searchTerm, $options: "i" } },
+      { status: { $regex: searchTerm, $options: "i" } },
+    ];
+  }
 
   const [data, total] = await Promise.all([
     attendanceModel

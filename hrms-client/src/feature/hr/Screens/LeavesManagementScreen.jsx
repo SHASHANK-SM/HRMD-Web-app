@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { API } from "../../../Core/url";
+import { errorMsgApi } from "../../../Core/toasts";
 import {
   Search,
   CalendarDays,
@@ -26,6 +27,34 @@ const LeavesManagementScreen = () => {
   const [status, setStatus] = useState("All Status");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState(null);
+
+  const handleExport = async () => {
+    if (!token) return;
+    try {
+      const params = { export: "csv" };
+      if (search) params.search = search;
+      if (leaveType !== "All Leave Types") params.leaveType = leaveType.toLowerCase().replace(" leave", "");
+      if (status !== "All Status") params.status = status;
+
+      const response = await API.get("/reports/leave", {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = `leave-report-${Date.now()}.csv`;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to export leaves");
+    }
+  };
 
   const [requests, setRequests] = useState([]);
 
@@ -135,6 +164,7 @@ const LeavesManagementScreen = () => {
 
         <button
           type="button"
+          onClick={handleExport}
           className="self-start sm:self-auto flex items-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50"
         >
           <Download size={16} />

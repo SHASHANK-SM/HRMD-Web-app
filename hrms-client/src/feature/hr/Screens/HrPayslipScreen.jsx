@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { API } from "../../../Core/url";
+import { errorMsgApi } from "../../../Core/toasts";
 import {
   Search,
   Download,
@@ -141,6 +142,165 @@ const HrPayslipScreen = () => {
       .catch((error) => console.error("Failed to fetch HR payslips:", error));
   }, [token]);
 
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [generateForm, setGenerateForm] = useState({
+    employeeId: "",
+    month: "",
+    year: new Date().getFullYear().toString(),
+    baseSalary: "",
+    hra: "",
+    conveyance: "",
+    specialAllowance: "",
+    bonus: "",
+    overtime: "",
+    professionalTax: "",
+    pf: "",
+    tds: "",
+    otherDeductions: "",
+    calendarDays: "",
+    paidDays: "",
+    lossDays: "",
+  });
+
+  useEffect(() => {
+    if (!token) return;
+    const fetchEmployees = async () => {
+      try {
+        const response = await API.get("/employees", {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { page: 1, limit: 200 },
+        });
+        setEmployees(response?.data?.data || []);
+      } catch (error) {
+        console.error("Failed to fetch employees:", error);
+      }
+    };
+    fetchEmployees();
+  }, [token]);
+
+  const handleExport = async () => {
+    if (!token) return;
+    try {
+      const params = { export: "csv" };
+      if (search) params.search = search;
+      if (status !== "All Status") params.status = status.toLowerCase();
+
+      const response = await API.get("/reports/payroll", {
+        headers: { Authorization: `Bearer ${token}` },
+        params,
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = `payslip-report-${Date.now()}.csv`;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to export payslips");
+    }
+  };
+
+  const handleGenerate = async (e) => {
+    e.preventDefault();
+    if (!token || generating) return;
+
+    const selectedEmployee = employees.find((emp) => emp._id === generateForm.employeeId);
+    if (!selectedEmployee) {
+      errorMsgApi("Please select a valid employee");
+      return;
+    }
+
+    if (!generateForm.month || !generateForm.baseSalary) {
+      errorMsgApi("Month and base salary are required");
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const payload = {
+        empId: generateForm.employeeId,
+        month: generateForm.month,
+        year: parseInt(generateForm.year) || new Date().getFullYear(),
+        baseSalary: parseFloat(generateForm.baseSalary) || 0,
+        hra: parseFloat(generateForm.hra) || 0,
+        conveyance: parseFloat(generateForm.conveyance) || 0,
+        specialAllowance: parseFloat(generateForm.specialAllowance) || 0,
+        bonus: parseFloat(generateForm.bonus) || 0,
+        overtime: parseFloat(generateForm.overtime) || 0,
+        professionalTax: parseFloat(generateForm.professionalTax) || 0,
+        pf: parseFloat(generateForm.pf) || 0,
+        tds: parseFloat(generateForm.tds) || 0,
+        otherDeductions: parseFloat(generateForm.otherDeductions) || 0,
+        calendarDays: parseInt(generateForm.calendarDays) || 0,
+        paidDays: parseInt(generateForm.paidDays) || 0,
+        lossDays: parseInt(generateForm.lossDays) || 0,
+      };
+
+      await API.post("/hr/pay-slip", payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      errorMsgApi("Payslip generated successfully", "success");
+      setShowGenerateModal(false);
+      setGenerateForm({
+        employeeId: "",
+        month: "",
+        year: new Date().getFullYear().toString(),
+        baseSalary: "",
+        hra: "",
+        conveyance: "",
+        specialAllowance: "",
+        bonus: "",
+        overtime: "",
+        professionalTax: "",
+        pf: "",
+        tds: "",
+        otherDeductions: "",
+        calendarDays: "",
+        paidDays: "",
+        lossDays: "",
+      });
+
+      // Refresh the payslips list
+      const response = await API.get("/payroll", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const records = response?.data?.data || [];
+      setPayslips(
+        records.map((record) => ({
+          id: record._id,
+          employee: record.empId?.name || "-",
+          employeeId: record.empId?.empId || record.empId || "-",
+          department: record.empId?.department?.title || "-",
+          designation: record.empId?.jobTitle || "-",
+          month: `${record.month || "-"} ${record.year || ""}`.trim(),
+          basic: Number(record.baseSalary || 0),
+          allowances:
+            Number(record.totalEarnings || 0) -
+            Number(record.baseSalary || 0),
+          deductions: Number(record.totalDeduction || 0),
+          netSalary: Number(record.netSalary || 0),
+          generatedOn: record.createdAt || "-",
+          status: String(record.status || "generated").replace(
+            /^./,
+            (letter) => letter.toUpperCase(),
+          ),
+        })),
+      );
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to generate payslip");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const filteredPayslips = useMemo(() => {
     return payslips.filter((payslip) => {
       const text = search.toLowerCase();
@@ -181,6 +341,7 @@ const HrPayslipScreen = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={handleExport}
             className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-600 hover:bg-slate-50"
           >
             <Download size={16} />
@@ -189,6 +350,7 @@ const HrPayslipScreen = () => {
 
           <button
             type="button"
+            onClick={() => setShowGenerateModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
           >
             <Plus size={17} />
@@ -418,6 +580,18 @@ const HrPayslipScreen = () => {
         <PayslipModal
           payslip={selectedPayslip}
           onClose={() => setSelectedPayslip(null)}
+        />
+      )}
+
+      {/* Generate Payslip Modal */}
+      {showGenerateModal && (
+        <GeneratePayslipModal
+          employees={employees}
+          onClose={() => setShowGenerateModal(false)}
+          onSubmit={handleGenerate}
+          generating={generating}
+          form={generateForm}
+          setForm={setGenerateForm}
         />
       )}
     </div>
@@ -655,26 +829,272 @@ const Info = ({ label, value }) => (
 );
 
 /* =========================================================
-   SALARY ROW
+   GENERATE PAYSLIP MODAL
 ========================================================= */
 
-const SalaryRow = ({ label, value, positive, negative }) => (
-  <div className="flex items-center justify-between">
-    <span className="text-sm text-slate-500">{label}</span>
+const GeneratePayslipModal = ({
+  employees,
+  onClose,
+  onSubmit,
+  generating,
+  form,
+  setForm,
+}) => {
+  const monthOptions = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
 
-    <span
-      className={`text-sm font-medium ${
-        positive
-          ? "text-emerald-600"
-          : negative
-            ? "text-red-500"
-            : "text-slate-800"
-      }`}
-    >
-      {positive ? "+" : negative ? "-" : ""}
-      {value}
-    </span>
-  </div>
-);
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-900/50 flex items-center justify-center p-4">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
+        {/* Header */}
+        <div className="sticky top-0 bg-white px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-900">Generate Payslip</h2>
+            <p className="text-xs text-slate-400 mt-1">Enter employee salary details</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={onSubmit} className="p-5 space-y-4">
+          {/* Employee Selection */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Employee *</label>
+            <select
+              value={form.employeeId}
+              onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              required
+            >
+              <option value="">Select employee</option>
+              {employees.map((emp) => (
+                <option key={emp._id} value={emp._id}>
+                  {emp.name} ({emp.empId})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Month & Year */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Month *</label>
+              <select
+                value={form.month}
+                onChange={(e) => setForm({ ...form, month: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                required
+              >
+                <option value="">Select month</option>
+                {monthOptions.map((m) => (
+                  <option key={m} value={m.toLowerCase()}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Year *</label>
+              <input
+                type="number"
+                value={form.year}
+                onChange={(e) => setForm({ ...form, year: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                min="2020"
+                max="2030"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Salary Components - Earnings */}
+          <div className="border-t border-slate-200 pt-4">
+            <h3 className="text-sm font-semibold text-slate-800 mb-3">Earnings</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Basic Salary *</label>
+                <input
+                  type="number"
+                  value={form.baseSalary}
+                  onChange={(e) => setForm({ ...form, baseSalary: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">HRA</label>
+                <input
+                  type="number"
+                  value={form.hra}
+                  onChange={(e) => setForm({ ...form, hra: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Conveyance</label>
+                <input
+                  type="number"
+                  value={form.conveyance}
+                  onChange={(e) => setForm({ ...form, conveyance: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Special Allowance</label>
+                <input
+                  type="number"
+                  value={form.specialAllowance}
+                  onChange={(e) => setForm({ ...form, specialAllowance: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Bonus</label>
+                <input
+                  type="number"
+                  value={form.bonus}
+                  onChange={(e) => setForm({ ...form, bonus: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Overtime</label>
+                <input
+                  type="number"
+                  value={form.overtime}
+                  onChange={(e) => setForm({ ...form, overtime: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Salary Components - Deductions */}
+          <div className="border-t border-slate-200 pt-4">
+            <h3 className="text-sm font-semibold text-slate-800 mb-3">Deductions</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Professional Tax</label>
+                <input
+                  type="number"
+                  value={form.professionalTax}
+                  onChange={(e) => setForm({ ...form, professionalTax: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">PF</label>
+                <input
+                  type="number"
+                  value={form.pf}
+                  onChange={(e) => setForm({ ...form, pf: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">TDS</label>
+                <input
+                  type="number"
+                  value={form.tds}
+                  onChange={(e) => setForm({ ...form, tds: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Other Deductions</label>
+                <input
+                  type="number"
+                  value={form.otherDeductions}
+                  onChange={(e) => setForm({ ...form, otherDeductions: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Attendance Details */}
+          <div className="border-t border-slate-200 pt-4">
+            <h3 className="text-sm font-semibold text-slate-800 mb-3">Attendance</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Calendar Days</label>
+                <input
+                  type="number"
+                  value={form.calendarDays}
+                  onChange={(e) => setForm({ ...form, calendarDays: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Paid Days</label>
+                <input
+                  type="number"
+                  value={form.paidDays}
+                  onChange={(e) => setForm({ ...form, paidDays: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Loss Days</label>
+                <input
+                  type="number"
+                  value={form.lossDays}
+                  onChange={(e) => setForm({ ...form, lossDays: e.target.value })}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  min="0"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-11 rounded-xl border border-slate-200 px-5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={generating}
+              className="h-11 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {generating ? "Generating..." : "Generate Payslip"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 export default HrPayslipScreen;

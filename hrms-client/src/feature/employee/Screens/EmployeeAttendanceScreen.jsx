@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import {
   CalendarCheck,
   Clock3,
@@ -10,11 +11,13 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
+  Search,
 } from "lucide-react";
 import { API } from "../../../Core/url";
 
 const EmployeeAttendanceScreen = () => {
   const { token } = useSelector((state) => state.auth);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState(null);
@@ -32,6 +35,8 @@ const EmployeeAttendanceScreen = () => {
     overtime: "0h 0m",
     attendancePercentage: "0%",
   });
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("search") || "");
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get("search") || "");
 
   const getAuthConfig = () => ({
     headers: {
@@ -184,12 +189,14 @@ const EmployeeAttendanceScreen = () => {
 
     try {
       const params = getMonthParams();
+      if (debouncedSearch) params.search = debouncedSearch;
       const response = await API.get("/attendance/history", {
         ...getAuthConfig(),
         params: {
           page: 1,
           limit: 50,
           month: `${params.year}-${String(params.month).padStart(2, "0")}`,
+          ...params,
         },
       });
 
@@ -227,6 +234,29 @@ const EmployeeAttendanceScreen = () => {
     fetchMonthlySummary();
     fetchHistory();
   }, [token, selectedMonthDate]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    if (searchTerm) {
+      params.set("search", searchTerm);
+    } else {
+      params.delete("search");
+    }
+    setSearchParams(params, { replace: true });
+  }, [searchTerm, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (token) {
+      fetchHistory();
+    }
+  }, [debouncedSearch, token, selectedMonthDate]);
 
   useEffect(() => {
     if (!isCheckedIn || !checkInTime) return;
@@ -511,29 +541,46 @@ const EmployeeAttendanceScreen = () => {
             </p>
           </div>
 
-          {/* Month Selector */}
-          <div className="flex items-center rounded-xl border border-slate-200 bg-white">
-            <button
-              type="button"
-              onClick={() => changeMonth("previous")}
-              className="flex h-9 w-9 items-center justify-center text-slate-500 hover:bg-slate-50"
-              aria-label="Previous month"
-            >
-              <ChevronLeft size={17} />
-            </button>
-
-            <div className="min-w-[125px] border-x border-slate-200 px-3 text-center text-sm font-medium text-slate-700">
-              {getSelectedMonthLabel()}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center w-full sm:w-auto">
+            {/* Search */}
+            <div className="relative flex-1 sm:w-64">
+              <Search
+                size={18}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search date, status..."
+                className="h-10 w-full pl-10 pr-4 rounded-lg border border-slate-200 bg-slate-50 text-sm outline-none focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
             </div>
 
-            <button
-              type="button"
-              onClick={() => changeMonth("next")}
-              className="flex h-9 w-9 items-center justify-center text-slate-500 hover:bg-slate-50"
-              aria-label="Next month"
-            >
-              <ChevronRight size={17} />
-            </button>
+            {/* Month Selector */}
+            <div className="flex items-center rounded-xl border border-slate-200 bg-white">
+              <button
+                type="button"
+                onClick={() => changeMonth("previous")}
+                className="flex h-9 w-9 items-center justify-center text-slate-500 hover:bg-slate-50"
+                aria-label="Previous month"
+              >
+                <ChevronLeft size={17} />
+              </button>
+
+              <div className="min-w-[125px] border-x border-slate-200 px-3 text-center text-sm font-medium text-slate-700">
+                {getSelectedMonthLabel()}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => changeMonth("next")}
+                className="flex h-9 w-9 items-center justify-center text-slate-500 hover:bg-slate-50"
+                aria-label="Next month"
+              >
+                <ChevronRight size={17} />
+              </button>
+            </div>
           </div>
         </div>
 

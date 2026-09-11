@@ -81,7 +81,7 @@ const CompanyRegistrationScreen = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-4 sm:py-6">
-      <div className="w-full max-w-6xl mx-auto">
+      <div className="w-full max-w-7xl mx-auto">
         {/* ================= HEADER ================= */}
         <div className="flex items-center justify-between mb-4 sm:mb-5 px-1 sm:px-2">
           {/* Logo */}
@@ -110,7 +110,7 @@ const CompanyRegistrationScreen = () => {
 
         {/* ================= MAIN CARD ================= */}
         <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/70 overflow-hidden border border-slate-100">
-          <div className="grid grid-cols-1 lg:grid-cols-2">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr]">
             {/* ================= LEFT SECTION ================= */}
             <div className="hidden lg:flex relative bg-blue-600 overflow-hidden items-center justify-center p-6 xl:p-10">
               {/* Decorative circles */}
@@ -152,7 +152,7 @@ const CompanyRegistrationScreen = () => {
 
             {/* ================= RIGHT SECTION ================= */}
             <div className="flex items-center justify-center p-5 sm:p-8 lg:p-10">
-              <div className="w-full max-w-md">
+              <div className="w-full max-w-xl">
                 {/* Welcome */}
                 <div className="mb-6 sm:mb-8">
                   <p className="text-xs sm:text-sm font-semibold text-blue-600 mb-2 tracking-wide">
