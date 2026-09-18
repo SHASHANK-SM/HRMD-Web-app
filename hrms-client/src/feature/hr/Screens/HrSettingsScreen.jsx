@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { API } from "../../../Core/url";
+import { errorMsgApi, successfully } from "../../../Core/toasts";
 import {
   User,
   Bell,
@@ -23,6 +24,7 @@ const HrSettingsScreen = () => {
     email: "",
     phone: "",
     designation: "",
+    empId: "",
   });
 
   const [notifications, setNotifications] = useState({
@@ -52,6 +54,7 @@ const HrSettingsScreen = () => {
           email: user.email || "",
           phone: user.mobile || "",
           designation: user.jobTitle || "",
+          empId: user.empId || "",
         });
         setNotifications((previous) => ({
           ...previous,
@@ -75,12 +78,71 @@ const HrSettingsScreen = () => {
     }));
   };
 
-  const handleSave = () => {
+  const showSaved = () => {
     setSaved(true);
 
     setTimeout(() => {
       setSaved(false);
     }, 2500);
+  };
+
+  const handleProfileSave = async () => {
+    try {
+      await API.patch("/profile", {
+        name: profile.name,
+        email: profile.email,
+        mobile: profile.phone,
+        jobTitle: profile.designation,
+      });
+      showSaved();
+      successfully("Profile updated successfully");
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to update profile");
+    }
+  };
+
+  const handleNotificationsSave = async () => {
+    try {
+      await API.patch("/settings", notifications);
+      showSaved();
+      successfully("Notification settings updated successfully");
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to update settings");
+    }
+  };
+
+  const handlePasswordSave = async () => {
+    if (password.newPassword !== password.confirm) {
+      errorMsgApi("New passwords do not match");
+      return;
+    }
+    try {
+      await API.patch(`/auth/change-password/${profile.empId}`, {
+        currentPassword: password.current,
+        password: password.newPassword,
+      });
+      setPassword({ current: "", newPassword: "", confirm: "" });
+      showSaved();
+      successfully("Password updated successfully");
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to update password");
+    }
+  };
+
+  const handleCompanySave = async (company) => {
+    try {
+      await API.post("/auth/update-company-details", {
+        companyName: company.name,
+        businessMail: company.email,
+        mobile: company.phone,
+        companyAddress: company.address,
+        workingHours: company.workingHours,
+      });
+      showSaved();
+      successfully("Company settings updated successfully");
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to update company settings");
+    }
   };
 
   const tabs = [
@@ -146,7 +208,7 @@ const HrSettingsScreen = () => {
             <ProfileSettings
               profile={profile}
               onChange={handleProfileChange}
-              onSave={handleSave}
+              onSave={handleProfileSave}
             />
           )}
 
@@ -154,6 +216,7 @@ const HrSettingsScreen = () => {
             <NotificationSettings
               notifications={notifications}
               setNotifications={setNotifications}
+              onSave={handleNotificationsSave}
             />
           )}
 
@@ -161,11 +224,11 @@ const HrSettingsScreen = () => {
             <SecuritySettings
               password={password}
               onChange={handlePasswordChange}
-              onSave={handleSave}
+              onSave={handlePasswordSave}
             />
           )}
 
-          {activeTab === "Company" && <CompanySettings onSave={handleSave} />}
+          {activeTab === "Company" && <CompanySettings onSave={handleCompanySave} />}
 
           {/* Save message */}
           {saved && (
@@ -247,7 +310,7 @@ const ProfileSettings = ({ profile, onChange, onSave }) => {
 /* Notification Settings */
 /* ---------------------------------- */
 
-const NotificationSettings = ({ notifications, setNotifications }) => {
+const NotificationSettings = ({ notifications, setNotifications, onSave }) => {
   const toggleNotification = (field) => {
     setNotifications((prev) => ({
       ...prev,
@@ -318,6 +381,10 @@ const NotificationSettings = ({ notifications, setNotifications }) => {
             </button>
           </div>
         ))}
+      </div>
+
+      <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+        <SaveButton onClick={onSave} />
       </div>
     </div>
   );
@@ -464,7 +531,7 @@ const CompanySettings = ({ onSave }) => {
           onChange={(value) => handleChange("workingHours", value)}
         />
 
-        <SaveButton onClick={onSave} />
+        <SaveButton onClick={() => onSave(company)} />
       </div>
     </div>
   );

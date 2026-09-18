@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 
 const schema = new mongoose.Schema({
   baseSalary: { type: Number, default: 0, min: 0 },
+  monthlyCtc: { type: Number, default: 0, min: 0 },
+  annualCtc: { type: Number, default: 0, min: 0 },
+  employerPf: { type: Number, default: 0, min: 0 },
+  otherAllowances: { type: Number, default: 0, min: 0 },
+  employeePf: { type: Number, default: 0, min: 0 },
+  netPay: { type: Number, default: 0, min: 0 },
   hra: { type: Number, default: 0, min: 0 },
   conveyance: { type: Number, default: 0, min: 0 },
   specialAllowance: { type: Number, default: 0, min: 0 },

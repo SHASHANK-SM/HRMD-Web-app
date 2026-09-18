@@ -27,6 +27,7 @@ const LeavesManagementScreen = () => {
   const [status, setStatus] = useState("All Status");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState(null);
+  const [activeMenuId, setActiveMenuId] = useState(null);
 
   const handleExport = async () => {
     if (!token) return;
@@ -358,7 +359,7 @@ const LeavesManagementScreen = () => {
 
                     {/* Action */}
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-1">
+                      <div className="relative flex items-center gap-1">
                         <button
                           type="button"
                           title="View details"
@@ -396,10 +397,28 @@ const LeavesManagementScreen = () => {
 
                         <button
                           type="button"
+                          title="More actions"
+                          onClick={() =>
+                            setActiveMenuId(
+                              activeMenuId === request.id ? null : request.id,
+                            )
+                          }
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"
                         >
                           <MoreHorizontal size={17} />
                         </button>
+                        {activeMenuId === request.id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedLeave(request);
+                              setActiveMenuId(null);
+                            }}
+                            className="absolute right-0 top-9 z-20 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-lg hover:bg-slate-50"
+                          >
+                            View Details
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

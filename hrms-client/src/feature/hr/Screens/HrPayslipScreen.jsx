@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { API } from "../../../Core/url";
 import { errorMsgApi } from "../../../Core/toasts";
@@ -18,98 +18,100 @@ import {
   Printer,
 } from "lucide-react";
 
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
+const roundMoney = (value) => {
+  const num = Number(value);
+  if (Number.isNaN(num)) return 0;
+  return Math.round(num * 100) / 100;
+};
+
+const formatCurrency = (value) => {
+  const num = Number(value);
+  if (Number.isNaN(num)) return "₹0";
+  return `₹${num.toLocaleString("en-IN")}`;
+};
+
+const normalizePayslip = (record) => {
+  const emp = record.empId || {};
+  const basic = Number(record.baseSalary || 0);
+  const hra = Number(record.hra || 0);
+  const conveyance = Number(record.conveyance || 0);
+  const specialAllowance = Number(record.specialAllowance || 0);
+  const bonus = Number(record.bonus || 0);
+  const overtime = Number(record.overtime || 0);
+  const professionalTax = Number(record.professionalTax || 0);
+  const employeePf = Number(record.employeePf || record.pf || 0);
+  const tds = Number(record.tds || 0);
+  const otherDeductions = Number(record.otherDeductions || 0);
+  const totalEarnings =
+    Number(record.totalEarnings || 0) || basic + hra + conveyance + specialAllowance + bonus + overtime;
+  const totalDeductions =
+    Number(record.totalDeductions || 0) ||
+    Number(record.totalDeduction || 0) ||
+    professionalTax + employeePf + tds + otherDeductions;
+  const netSalary = Number(record.netSalary || 0) || totalEarnings - totalDeductions;
+  const monthlyCtc = Number(record.monthlyCtc || 0);
+  const annualCtc = Number(record.annualCtc || 0);
+
+  return {
+    id: record._id,
+    employee: emp.name || "-",
+    employeeId: emp.empId || record.empId || "-",
+    department: emp.department?.title || emp.department || "-",
+    designation: emp.jobTitle || "-",
+    month: `${record.month || "-"} ${record.year || ""}`.trim(),
+    basic,
+    basicSalary: basic,
+    hra,
+    conveyance,
+    specialAllowance,
+    bonus,
+    overtime,
+    allowances: roundMoney(hra + conveyance + specialAllowance + bonus + overtime),
+    totalEarnings,
+    grossSalary: totalEarnings,
+    professionalTax,
+    employeePf,
+    pf: employeePf,
+    tds,
+    otherDeductions,
+    deductions: totalDeductions,
+    totalDeductions,
+    netSalary,
+    monthlyCtc,
+    annualCtc,
+    generatedOn: record.createdAt || "-",
+    status: String(record.status || "generated").replace(
+      /^./,
+      (letter) => letter.toUpperCase(),
+    ),
+  };
+};
+
+const SalaryRow = ({ label, value, positive, negative }) => (
+  <div className="flex items-center justify-between py-1.5">
+    <span className="text-sm text-slate-600">{label}</span>
+    <span
+      className={`text-sm font-medium ${positive ? "text-emerald-600" : negative ? "text-red-600" : "text-slate-800"}`}
+    >
+      {value}
+    </span>
+  </div>
+);
+
 const HrPayslipScreen = () => {
   const { token } = useSelector((state) => state.auth);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("All Status");
   const [selectedPayslip, setSelectedPayslip] = useState(null);
+  const [payslipLoading, setPayslipLoading] = useState(false);
+  const [payslipError, setPayslipError] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(null);
+  const menuRef = useRef(null);
 
-  const samplePayslips = [
-    {
-      id: "PS001",
-      employee: "John Doe",
-      employeeId: "EMP001",
-      department: "Engineering",
-      designation: "Software Engineer",
-      month: "September 2026",
-      basic: 45000,
-      allowances: 8000,
-      deductions: 3000,
-      netSalary: 50000,
-      generatedOn: "01 Sep 2026",
-      status: "Generated",
-    },
-    {
-      id: "PS002",
-      employee: "Priya Sharma",
-      employeeId: "EMP002",
-      department: "HR",
-      designation: "HR Executive",
-      month: "September 2026",
-      basic: 40000,
-      allowances: 7000,
-      deductions: 2500,
-      netSalary: 44500,
-      generatedOn: "01 Sep 2026",
-      status: "Generated",
-    },
-    {
-      id: "PS003",
-      employee: "Rahul Kumar",
-      employeeId: "EMP003",
-      department: "Finance",
-      designation: "Financial Analyst",
-      month: "September 2026",
-      basic: 48000,
-      allowances: 9000,
-      deductions: 4000,
-      netSalary: 53000,
-      generatedOn: "02 Sep 2026",
-      status: "Generated",
-    },
-    {
-      id: "PS004",
-      employee: "Sneha Reddy",
-      employeeId: "EMP004",
-      department: "Marketing",
-      designation: "Marketing Executive",
-      month: "September 2026",
-      basic: 42000,
-      allowances: 6000,
-      deductions: 2500,
-      netSalary: 45500,
-      generatedOn: "02 Sep 2026",
-      status: "Generated",
-    },
-    {
-      id: "PS005",
-      employee: "Arjun Patel",
-      employeeId: "EMP005",
-      department: "Engineering",
-      designation: "Frontend Developer",
-      month: "September 2026",
-      basic: 50000,
-      allowances: 10000,
-      deductions: 4500,
-      netSalary: 55500,
-      generatedOn: "03 Sep 2026",
-      status: "Pending",
-    },
-    {
-      id: "PS006",
-      employee: "Ananya Singh",
-      employeeId: "EMP006",
-      department: "Sales",
-      designation: "Sales Executive",
-      month: "September 2026",
-      basic: 38000,
-      allowances: 6500,
-      deductions: 2000,
-      netSalary: 42500,
-      generatedOn: "03 Sep 2026",
-      status: "Generated",
-    },
-  ];
   const [payslips, setPayslips] = useState([]);
 
   useEffect(() => {
@@ -149,6 +151,8 @@ const HrPayslipScreen = () => {
     employeeId: "",
     month: "",
     year: new Date().getFullYear().toString(),
+    monthlyCtc: "",
+    annualCtc: "",
     baseSalary: "",
     hra: "",
     conveyance: "",
@@ -207,6 +211,77 @@ const HrPayslipScreen = () => {
     }
   };
 
+  const handleViewPayslip = async (payslip) => {
+    if (!payslip?.id) {
+      setSelectedPayslip(payslip);
+      return;
+    }
+    setPayslipLoading(true);
+    setPayslipError(null);
+    setSelectedPayslip(null);
+    try {
+      const response = await API.get(`/payroll/payslips/${payslip.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = response?.data;
+      const details = data?.data?.payslip || data?.data || data?.payslip || data;
+      if (details && typeof details === "object") {
+        setSelectedPayslip({
+          ...payslip,
+          ...normalizePayslip(details),
+        });
+      } else {
+        setSelectedPayslip(payslip);
+      }
+    } catch (error) {
+      setPayslipError(
+        error?.response?.data?.message || "Failed to fetch payslip details"
+      );
+      setSelectedPayslip(payslip);
+    } finally {
+      setPayslipLoading(false);
+    }
+  };
+
+  const handleDownloadPayslip = async (payslip) => {
+    if (!payslip?.id || !token) return;
+    try {
+      const response = await API.get(`/payroll/payslips/${payslip.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], {
+        type: response.headers?.["content-type"] || "application/pdf",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Payslip-${(payslip.month || "Payslip")
+        .replace(/\s+/g, "-")
+        .replace(/[^\w-]/g, "")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      errorMsgApi(
+        error?.response?.data?.message || "Failed to download payslip"
+      );
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(null);
+      }
+    };
+    if (menuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [menuOpen]);
+
   const handleGenerate = async (e) => {
     e.preventDefault();
     if (!token || generating) return;
@@ -222,12 +297,27 @@ const HrPayslipScreen = () => {
       return;
     }
 
+    const monthlyCtc = parseFloat(generateForm.monthlyCtc);
+    const annualCtc = parseFloat(generateForm.annualCtc);
+    if (
+      !Number.isNaN(monthlyCtc) &&
+      !Number.isNaN(annualCtc) &&
+      Math.abs(monthlyCtc * 12 - annualCtc) > 0.1
+    ) {
+      errorMsgApi("Annual CTC must be equal to Monthly CTC multiplied by 12");
+      return;
+    }
+
     setGenerating(true);
     try {
       const payload = {
         empId: generateForm.employeeId,
         month: generateForm.month,
         year: parseInt(generateForm.year) || new Date().getFullYear(),
+        monthlyCtc: Number.isNaN(monthlyCtc) ? 0 : roundMoney(monthlyCtc),
+        annualCtc: Number.isNaN(annualCtc)
+          ? roundMoney(monthlyCtc * 12)
+          : roundMoney(annualCtc),
         baseSalary: parseFloat(generateForm.baseSalary) || 0,
         hra: parseFloat(generateForm.hra) || 0,
         conveyance: parseFloat(generateForm.conveyance) || 0,
@@ -243,7 +333,7 @@ const HrPayslipScreen = () => {
         lossDays: parseInt(generateForm.lossDays) || 0,
       };
 
-      await API.post("/hr/pay-slip", payload, {
+      await API.post("/payroll", payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -253,6 +343,8 @@ const HrPayslipScreen = () => {
         employeeId: "",
         month: "",
         year: new Date().getFullYear().toString(),
+        monthlyCtc: "",
+        annualCtc: "",
         baseSalary: "",
         hra: "",
         conveyance: "",
@@ -507,11 +599,14 @@ const HrPayslipScreen = () => {
 
                   {/* Actions */}
                   <td className="px-4 py-4">
-                    <div className="flex items-center gap-1">
+                    <div
+                      className="relative flex items-center gap-1"
+                      ref={menuOpen === payslip.id ? menuRef : null}
+                    >
                       <button
                         type="button"
                         title="View payslip"
-                        onClick={() => setSelectedPayslip(payslip)}
+                        onClick={() => handleViewPayslip(payslip)}
                         className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                       >
                         <Eye size={16} />
@@ -521,6 +616,7 @@ const HrPayslipScreen = () => {
                         <button
                           type="button"
                           title="Download"
+                          onClick={() => handleDownloadPayslip(payslip)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50"
                         >
                           <Download size={16} />
@@ -529,10 +625,36 @@ const HrPayslipScreen = () => {
 
                       <button
                         type="button"
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"
+                        title="More actions"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpen(menuOpen === payslip.id ? null : payslip.id);
+                        }}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center ${menuOpen === payslip.id ? "bg-slate-100" : "hover:bg-slate-100"}`}
                       >
                         <MoreHorizontal size={17} />
                       </button>
+
+                      {menuOpen === payslip.id && (
+                        <div className="absolute right-0 top-9 z-20 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                          <button
+                            type="button"
+                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                            onClick={() => handleViewPayslip(payslip)}
+                          >
+                            View Payslip
+                          </button>
+                          {payslip.status === "Generated" && (
+                            <button
+                              type="button"
+                              className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                              onClick={() => handleDownloadPayslip(payslip)}
+                            >
+                              Download PDF
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -576,12 +698,15 @@ const HrPayslipScreen = () => {
       </div>
 
       {/* Payslip Preview */}
-      {selectedPayslip && (
-        <PayslipModal
-          payslip={selectedPayslip}
-          onClose={() => setSelectedPayslip(null)}
-        />
-      )}
+        {selectedPayslip && (
+          <PayslipModal
+            payslip={selectedPayslip}
+            loading={payslipLoading}
+            error={payslipError}
+            onClose={() => setSelectedPayslip(null)}
+            onDownload={handleDownloadPayslip}
+          />
+        )}
 
       {/* Generate Payslip Modal */}
       {showGenerateModal && (
@@ -684,7 +809,7 @@ const PayslipStatus = ({ status }) => {
    PAYSLIP MODAL
 ========================================================= */
 
-const PayslipModal = ({ payslip, onClose }) => {
+const PayslipModal = ({ payslip, onClose, loading, error, onDownload }) => {
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/50 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
@@ -693,9 +818,14 @@ const PayslipModal = ({ payslip, onClose }) => {
           <div>
             <h2 className="font-semibold text-slate-900">Payslip Preview</h2>
 
-            <p className="text-xs text-slate-400 mt-1">
-              {payslip.month} • {payslip.id}
-            </p>
+            {loading && (
+              <p className="text-xs text-slate-400 mt-1">Loading payslip details...</p>
+            )}
+            {!loading && payslip?.month && (
+              <p className="text-xs text-slate-400 mt-1">
+                {payslip.month} • {payslip.id}
+              </p>
+            )}
           </div>
 
           <button
@@ -708,80 +838,172 @@ const PayslipModal = ({ payslip, onClose }) => {
 
         {/* Payslip */}
         <div className="p-5 sm:p-7">
-          {/* Company */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center">
-                <FileText size={21} className="text-white" />
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex flex-col items-center py-12">
+              <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm text-slate-500 mt-3">Loading payslip details...</p>
+            </div>
+          ) : payslip ? (
+            <>
+              {/* Company */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center">
+                    <FileText size={21} className="text-white" />
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900">HRMS Company</h3>
+
+                    <p className="text-xs text-slate-400">Salary Payslip</p>
+                  </div>
+                </div>
+
+                <div className="text-left sm:text-right">
+                  <p className="text-xs text-slate-400">Pay Period</p>
+
+                  <p className="text-sm font-semibold text-slate-800">
+                    {payslip.month}
+                  </p>
+                </div>
               </div>
 
-              <div>
-                <h3 className="font-bold text-slate-900">HRMS Company</h3>
+              {/* Employee */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 py-5 border-b border-slate-200">
+                <Info label="Employee Name" value={payslip.employee || "-"} />
 
-                <p className="text-xs text-slate-400">Salary Payslip</p>
+                <Info label="Employee ID" value={payslip.employeeId || "-"} />
+
+                <Info label="Department" value={payslip.department || "-"} />
+
+                <Info label="Designation" value={payslip.designation || "-"} />
               </div>
+
+              {/* Salary */}
+              <div className="py-5">
+                <h3 className="text-sm font-semibold text-slate-800 mb-4">
+                  Salary Details
+                </h3>
+
+                <div className="space-y-3">
+                  <SalaryRow
+                    label="Monthly CTC"
+                    value={formatCurrency(payslip.monthlyCtc || 0)}
+                  />
+
+                  <SalaryRow
+                    label="Annual CTC"
+                    value={formatCurrency(payslip.annualCtc || 0)}
+                  />
+
+                  <SalaryRow
+                    label="Basic Salary"
+                    value={formatCurrency(payslip.basicSalary || 0)}
+                  />
+
+                  <SalaryRow
+                    label="HRA"
+                    value={formatCurrency(payslip.hra || 0)}
+                    positive
+                  />
+
+                  <SalaryRow
+                    label="Conveyance"
+                    value={formatCurrency(payslip.conveyance || 0)}
+                    positive
+                  />
+
+                  <SalaryRow
+                    label="Special Allowance"
+                    value={formatCurrency(payslip.specialAllowance || 0)}
+                    positive
+                  />
+
+                  <SalaryRow
+                    label="Bonus"
+                    value={formatCurrency(payslip.bonus || 0)}
+                    positive
+                  />
+
+                  <SalaryRow
+                    label="Overtime"
+                    value={formatCurrency(payslip.overtime || 0)}
+                    positive
+                  />
+
+                  <SalaryRow
+                    label="Total Earnings / Gross Salary"
+                    value={formatCurrency(
+                      payslip.totalEarnings || payslip.grossSalary || 0,
+                    )}
+                    positive
+                  />
+
+                  <SalaryRow
+                    label="Professional Tax"
+                    value={formatCurrency(payslip.professionalTax || 0)}
+                    negative
+                  />
+
+                  <SalaryRow
+                    label="Employee PF"
+                    value={formatCurrency(payslip.employeePf || 0)}
+                    negative
+                  />
+
+                  <SalaryRow
+                    label="TDS"
+                    value={formatCurrency(payslip.tds || 0)}
+                    negative
+                  />
+
+                  <SalaryRow
+                    label="Other Deductions"
+                    value={formatCurrency(payslip.otherDeductions || 0)}
+                    negative
+                  />
+
+                  <SalaryRow
+                    label="Total Deductions"
+                    value={formatCurrency(payslip.totalDeductions || 0)}
+                    negative
+                  />
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-slate-200 flex items-center justify-between">
+                  <span className="font-semibold text-slate-800">Net Salary</span>
+
+                  <span className="text-xl font-bold text-blue-600">
+                    {formatCurrency(payslip.netSalary || 0)}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-sm text-slate-600">Payroll Status</span>
+                  <span className="text-sm font-medium text-slate-900">
+                    {payslip.status || "-"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="pt-4 border-t border-slate-100">
+                <p className="text-[11px] text-slate-400">
+                  This is a system-generated payslip.
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center py-12">
+              <p className="text-sm text-slate-500">No payslip data available</p>
             </div>
-
-            <div className="text-left sm:text-right">
-              <p className="text-xs text-slate-400">Pay Period</p>
-
-              <p className="text-sm font-semibold text-slate-800">
-                {payslip.month}
-              </p>
-            </div>
-          </div>
-
-          {/* Employee */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 py-5 border-b border-slate-200">
-            <Info label="Employee Name" value={payslip.employee} />
-
-            <Info label="Employee ID" value={payslip.employeeId} />
-
-            <Info label="Department" value={payslip.department} />
-
-            <Info label="Designation" value={payslip.designation} />
-          </div>
-
-          {/* Salary */}
-          <div className="py-5">
-            <h3 className="text-sm font-semibold text-slate-800 mb-4">
-              Salary Details
-            </h3>
-
-            <div className="space-y-3">
-              <SalaryRow
-                label="Basic Salary"
-                value={`₹${payslip.basic.toLocaleString("en-IN")}`}
-              />
-
-              <SalaryRow
-                label="Allowances"
-                value={`₹${payslip.allowances.toLocaleString("en-IN")}`}
-                positive
-              />
-
-              <SalaryRow
-                label="Deductions"
-                value={`₹${payslip.deductions.toLocaleString("en-IN")}`}
-                negative
-              />
-            </div>
-
-            <div className="mt-5 pt-4 border-t border-slate-200 flex items-center justify-between">
-              <span className="font-semibold text-slate-800">Net Salary</span>
-
-              <span className="text-xl font-bold text-blue-600">
-                ₹{payslip.netSalary.toLocaleString("en-IN")}
-              </span>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="pt-4 border-t border-slate-100">
-            <p className="text-[11px] text-slate-400">
-              This is a system-generated payslip.
-            </p>
-          </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -803,7 +1025,9 @@ const PayslipModal = ({ payslip, onClose }) => {
 
           <button
             type="button"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+            onClick={() => onDownload && onDownload(payslip)}
+            disabled={!payslip?.id}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download size={15} />
             Download PDF
@@ -908,6 +1132,34 @@ const GeneratePayslipModal = ({
                 min="2020"
                 max="2030"
                 required
+              />
+            </div>
+          </div>
+
+          {/* CTC */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Monthly CTC</label>
+              <input
+                type="number"
+                value={form.monthlyCtc}
+                onChange={(e) => setForm({ ...form, monthlyCtc: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Annual CTC</label>
+              <input
+                type="number"
+                value={form.annualCtc}
+                onChange={(e) => setForm({ ...form, annualCtc: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
               />
             </div>
           </div>

@@ -317,7 +317,9 @@ const HrDocumentsScreen = () => {
     formData.append("file", uploadFile);
 
     try {
-      await API.post("/documents", formData);
+      await API.post("/documents", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       setUploadEmployee("");
       setUploadType("");

@@ -8,8 +8,8 @@ export const downloadPayslipPdf = async (req,res) => {
   if(!p)return failure(res,404,"Payslip not found");
   const lines=[
     "HRMS PAYSLIP", "", `Employee: ${p.empId?.name||""}`, `Employee ID: ${p.empId?.empId||""}`, `Department: ${p.empId?.department?.title||""}`, `Designation: ${p.empId?.jobTitle||""}`, `Pay Month: ${p.month} ${p.year}`, "",
-    "EARNINGS", `Basic Salary: ${p.baseSalary||0}`, `HRA: ${p.hra||0}`, `Allowances: ${Number(p.conveyance||0)+Number(p.specialAllowance||0)}`, `Bonus: ${Number(p.bonus||p.advanceStatuoryBonus||0)}`, `Overtime: ${p.overtime||0}`, `Gross Salary: ${p.grossSalary??p.totalEarnings??0}`, "",
-    "DEDUCTIONS", `PF: ${p.pf||0}`, `Tax: ${p.tds||0}`, `Professional Tax: ${p.professionalTax||0}`, `Other Deductions: ${p.otherDeductions||0}`, `Total Deductions: ${p.totalDeduction||0}`, "", `NET SALARY: ${p.netSalary??Number(p.totalEarnings||0)-Number(p.totalDeduction||0)}`
+    "EARNINGS", `Basic Salary: ${p.baseSalary ?? p.basicSalary ?? 0}`, `HRA: ${p.hra ?? 0}`, `Other Allowances: ${p.otherAllowances ?? Number(p.conveyance ?? 0) + Number(p.specialAllowance ?? 0)}`, `Employer PF: ${p.employerPf ?? 0}`, `Gross Salary: ${p.grossSalary ?? p.totalEarnings ?? 0}`, "",
+    "DEDUCTIONS", `Employee PF: ${p.employeePf ?? p.pf ?? 0}`, `TDS: ${p.tds ?? 0}`, `Professional Tax: ${p.professionalTax ?? 0}`, `Other Deductions: ${p.otherDeductions ?? 0}`, `Total Deductions: ${p.totalDeduction ?? 0}`, "", `NET PAY: ${p.netPay ?? p.netSalary ?? 0}`
   ];
   res.setHeader("Content-Type","application/pdf"); res.setHeader("Content-Disposition",`attachment; filename=payslip-${p.empId?.empId||p._id}-${p.month}-${p.year}.pdf`); return res.end(createTextPdf(lines));
 };

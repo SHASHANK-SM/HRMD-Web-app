@@ -20,6 +20,12 @@ const HrReportsScreen = () => {
   const [department, setDepartment] = useState("All Departments");
   const [showReport, setShowReport] = useState(false);
   const [liveReportRows, setLiveReportRows] = useState([]);
+  const [attendanceSummary, setAttendanceSummary] = useState({
+    totalEmployees: 0,
+    totalPresent: 0,
+    totalAbsent: 0,
+    averageAttendance: 0,
+  });
 
   const parsePeriod = (periodStr) => {
     const [month, year] = periodStr.split(" ");
@@ -64,63 +70,6 @@ const HrReportsScreen = () => {
       errorMsgApi(error?.response?.data?.message || "Failed to export report");
     }
   };
-
-  const attendanceData = [
-    {
-      employee: "Rahul Sharma",
-      id: "EMP001",
-      department: "Engineering",
-      present: 22,
-      absent: 1,
-      late: 2,
-      percentage: "95.7%",
-    },
-    {
-      employee: "Priya Patel",
-      id: "EMP002",
-      department: "HR",
-      present: 21,
-      absent: 2,
-      late: 1,
-      percentage: "91.3%",
-    },
-    {
-      employee: "Arjun Kumar",
-      id: "EMP003",
-      department: "Finance",
-      present: 20,
-      absent: 3,
-      late: 3,
-      percentage: "87.0%",
-    },
-    {
-      employee: "Sneha Reddy",
-      id: "EMP004",
-      department: "Engineering",
-      present: 23,
-      absent: 0,
-      late: 1,
-      percentage: "100%",
-    },
-    {
-      employee: "Vikram Singh",
-      id: "EMP005",
-      department: "Marketing",
-      present: 19,
-      absent: 4,
-      late: 2,
-      percentage: "82.6%",
-    },
-    {
-      employee: "Ananya Rao",
-      id: "EMP006",
-      department: "Design",
-      present: 22,
-      absent: 1,
-      late: 0,
-      percentage: "95.7%",
-    },
-  ];
 
   const leaveData = [
     {
@@ -201,7 +150,7 @@ const HrReportsScreen = () => {
     if (department === "All Departments") return rows;
 
     return rows.filter((item) => item.department === department);
-  }, [department, attendanceData, liveReportRows, reportType]);
+  }, [department, liveReportRows, reportType]);
 
   const filteredLeave = useMemo(() => {
     const rows = reportType === "Leave" ? liveReportRows : [];
@@ -226,8 +175,14 @@ const HrReportsScreen = () => {
           ? "leave"
           : "payroll";
     try {
+      const { month, year } = parsePeriod(period);
       const response = await API.get(`/reports/${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
+        params: {
+          ...(month ? { month } : {}),
+          ...(year ? { year } : {}),
+          ...(department !== "All Departments" ? { department } : {}),
+        },
       });
       const rows = response?.data?.data || [];
       setLiveReportRows(
@@ -242,6 +197,14 @@ const HrReportsScreen = () => {
             "-",
         })),
       );
+      if (reportType === "Attendance") {
+        setAttendanceSummary(response?.data?.meta?.summary || {
+          totalEmployees: 0,
+          totalPresent: 0,
+          totalAbsent: 0,
+          averageAttendance: 0,
+        });
+      }
       setShowReport(true);
     } catch (error) {
       console.error("Failed to generate HR report:", error);
@@ -370,28 +333,28 @@ const HrReportsScreen = () => {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
             title="Total Employees"
-            value={filteredAttendance.length}
+            value={attendanceSummary.totalEmployees}
             icon={<Users size={20} />}
             iconClass="bg-blue-50 text-blue-600"
           />
 
           <SummaryCard
             title="Average Attendance"
-            value="92.1%"
+            value={`${attendanceSummary.averageAttendance}%`}
             icon={<BarChart3 size={20} />}
             iconClass="bg-emerald-50 text-emerald-600"
           />
 
           <SummaryCard
             title="Total Present"
-            value="127"
+            value={attendanceSummary.totalPresent}
             icon={<Clock3 size={20} />}
             iconClass="bg-violet-50 text-violet-600"
           />
 
           <SummaryCard
             title="Total Absent"
-            value="11"
+            value={attendanceSummary.totalAbsent}
             icon={<CalendarDays size={20} />}
             iconClass="bg-amber-50 text-amber-600"
           />
@@ -593,6 +556,7 @@ const AttendanceTable = ({ data }) => {
           <TableHeader>Present</TableHeader>
           <TableHeader>Absent</TableHeader>
           <TableHeader>Late</TableHeader>
+          <TableHeader>Status</TableHeader>
           <TableHeader>Attendance</TableHeader>
         </tr>
       </thead>
@@ -622,6 +586,12 @@ const AttendanceTable = ({ data }) => {
 
             <td className="px-5 py-4 text-sm font-medium text-amber-600">
               {item.late}
+            </td>
+
+            <td className="px-5 py-4 text-sm text-slate-600">
+              {String(item.status || "absent").replace(/^./, (letter) =>
+                letter.toUpperCase(),
+              )}
             </td>
 
             <td className="px-5 py-4">

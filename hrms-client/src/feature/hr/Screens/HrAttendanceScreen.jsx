@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Search,
   CalendarDays,
@@ -17,9 +17,11 @@ import {
 } from "lucide-react";
 import { API } from "../../../Core/url";
 import { useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 
 const HrAttendanceScreen = () => {
-  const token = useSelector((state) => state.login?.token);
+  const token = useSelector((state) => state.auth?.token);
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("All Departments");
@@ -33,6 +35,7 @@ const HrAttendanceScreen = () => {
   });
 
   const [showFilters, setShowFilters] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState(null);
   const [attendanceData, setAttendanceData] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [summary, setSummary] = useState({
@@ -108,7 +111,7 @@ const HrAttendanceScreen = () => {
     return employee.department?.title || "—";
   };
 
-  const loadAttendance = async () => {
+  const loadAttendance = useCallback(async () => {
     if (!token) {
       setAttendanceData([]);
       setSummary({
@@ -190,13 +193,13 @@ const HrAttendanceScreen = () => {
         late: 0,
       });
     }
-  };
+  }, [authConfig, date, department, search, token]);
 
-  const loadDepartments = async () => {
+  const loadDepartments = useCallback(async () => {
     if (!token) return;
 
     try {
-      const response = await API.get("/employees/departments", authConfig);
+      const response = await API.get("/employees/departments/list", authConfig);
 
       const data = response?.data?.data || [];
 
@@ -210,7 +213,7 @@ const HrAttendanceScreen = () => {
     } catch {
       setDepartments([]);
     }
-  };
+  }, [authConfig, token]);
 
   useEffect(() => {
     loadDepartments();
@@ -567,12 +570,33 @@ const HrAttendanceScreen = () => {
 
                     {/* Action */}
                     <td className="px-4 py-4">
-                      <button
-                        type="button"
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                      >
-                        <MoreHorizontal size={17} />
-                      </button>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          title="More actions"
+                          onClick={() =>
+                            setActiveMenuId(
+                              activeMenuId === employee.id ? null : employee.id,
+                            )
+                          }
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                        >
+                          <MoreHorizontal size={17} />
+                        </button>
+                        {activeMenuId === employee.id && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(
+                                `/employees-details?search=${encodeURIComponent(employee.id)}`,
+                              )
+                            }
+                            className="absolute right-0 top-9 z-20 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-lg hover:bg-slate-50"
+                          >
+                            View Employee
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

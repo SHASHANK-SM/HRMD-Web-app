@@ -94,6 +94,7 @@ const HrDashboard = () => {
       iconBg: "bg-blue-50",
       iconColor: "text-blue-600",
       positive: true,
+      path: "/employees-details",
     },
     {
       title: "Active Employees",
@@ -104,6 +105,7 @@ const HrDashboard = () => {
       iconBg: "bg-emerald-50",
       iconColor: "text-emerald-600",
       positive: true,
+      path: "/employees-details",
     },
     {
       title: "New Employees",
@@ -114,6 +116,7 @@ const HrDashboard = () => {
       iconBg: "bg-amber-50",
       iconColor: "text-amber-600",
       positive: true,
+      path: "/employees-details",
     },
     {
       title: "Present Today",
@@ -124,6 +127,7 @@ const HrDashboard = () => {
       iconBg: "bg-violet-50",
       iconColor: "text-violet-600",
       positive: true,
+      path: "/hr-attendance",
     },
   ];
 
@@ -216,7 +220,12 @@ const HrDashboard = () => {
                   <Icon size={20} className={stat.iconColor} />
                 </div>
 
-                <button className="text-slate-300 hover:text-slate-500">
+                <button
+                  type="button"
+                  title={`View ${stat.title}`}
+                  onClick={() => navigate(stat.path)}
+                  className="text-slate-300 hover:text-slate-500"
+                >
                   <MoreHorizontal size={18} />
                 </button>
               </div>
@@ -342,7 +351,12 @@ const HrDashboard = () => {
               <p className="text-xs text-slate-400 mt-1">Current month</p>
             </div>
 
-            <button className="text-slate-300">
+            <button
+              type="button"
+              title="Manage leaves"
+              onClick={() => navigate("/hr-leave-management")}
+              className="text-slate-300 hover:text-slate-500"
+            >
               <MoreHorizontal size={18} />
             </button>
           </div>

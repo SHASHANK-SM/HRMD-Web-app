@@ -125,6 +125,7 @@ const HrEmployeeManagentScreen = () => {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
+  const [activeMenuId, setActiveMenuId] = useState(null);
 
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -547,7 +548,7 @@ const HrEmployeeManagentScreen = () => {
 
                     {/* Action */}
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-1">
+                      <div className="relative flex items-center gap-1">
                         <button
                           type="button"
                           title="View"
@@ -568,20 +569,42 @@ const HrEmployeeManagentScreen = () => {
 
                         <button
                           type="button"
-                          title={
-                            employee.status === "Active"
-                              ? "Deactivate"
-                              : "Activate"
+                          title="More actions"
+                          onClick={() =>
+                            setActiveMenuId(
+                              activeMenuId === employee.id ? null : employee.id,
+                            )
                           }
-                          onClick={() => handleStatusChange(employee)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100"
                         >
-                          {employee.status === "Active" ? (
-                            <MoreHorizontal size={17} />
-                          ) : (
-                            <UserCheck size={16} />
-                          )}
+                          <MoreHorizontal size={17} />
                         </button>
+                        {activeMenuId === employee.id && (
+                          <div className="absolute right-0 top-9 z-20 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleEdit(employee);
+                                setActiveMenuId(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                            >
+                              Edit Employee
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleStatusChange(employee);
+                                setActiveMenuId(null);
+                              }}
+                              className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50"
+                            >
+                              {employee.status === "Active"
+                                ? "Deactivate"
+                                : "Activate"}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -204,7 +204,11 @@ export const hrAttendance = async (req, res) => {
   const { date, startDate, endDate, department, employeeId, status, search } =
     req.query;
   const { page, limit } = parsePage(req.query);
-  const employeeQuery = { head: req.user._id, role: { $ne: "hr" } };
+  const employeeQuery = {
+    head: req.user._id,
+    role: { $ne: "hr" },
+    empStatus: "active",
+  };
   if (department) employeeQuery.department = department;
   if (employeeId) employeeQuery._id = employeeId;
   if (search)

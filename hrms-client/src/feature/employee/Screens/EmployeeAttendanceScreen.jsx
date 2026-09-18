@@ -195,8 +195,8 @@ const EmployeeAttendanceScreen = () => {
         params: {
           page: 1,
           limit: 50,
-          month: `${params.year}-${String(params.month).padStart(2, "0")}`,
           ...params,
+          month: `${params.year}-${String(params.month).padStart(2, "0")}`,
         },
       });
 

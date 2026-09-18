@@ -266,10 +266,14 @@ export const changePassword = async (req, res) => {
   if (!target) return failure(res, 404, "User not found");
   if (req.user.role !== "hr" && String(req.user._id) !== String(target._id))
     return failure(res, 403, "Not allowed");
-  if (req.user.role === "hr" && String(target.head) !== String(req.user._id))
+  if (req.user.role === "hr" && String(target._id) !== String(req.user._id) && String(target.head) !== String(req.user._id))
     return failure(res, 403, "Not allowed");
   if (!req.body.password || String(req.body.password).length < 6)
     return failure(res, 400, "Password must be at least 6 characters");
+  if (String(target._id) === String(req.user._id)) {
+    if (!req.body.currentPassword || !(await bcrypt.compare(req.body.currentPassword, target.password)))
+      return failure(res, 400, "Current password is incorrect");
+  }
   target.password = req.body.password;
   if (req.body.firstName || req.body.lastName)
     target.name =

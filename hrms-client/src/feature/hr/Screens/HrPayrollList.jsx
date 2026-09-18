@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { API } from "../../../Core/url";
-import { errorMsgApi } from "../../../Core/toasts";
+import { errorMsgApi, successfully } from "../../../Core/toasts";
 import {
   Search,
   Download,
@@ -16,7 +16,90 @@ import {
   ChevronRight,
   X,
   Plus,
+  Trash2,
 } from "lucide-react";
+
+const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
+const parseAmount = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(String(value).trim().replace(/,/g, ""));
+  return Number.isFinite(number) && number >= 0 ? roundMoney(number) : null;
+};
+
+const formatCurrency = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "₹0";
+  const hasDecimals = Math.abs(number % 1) > 0.0001;
+  return `₹${number.toLocaleString("en-IN", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+const calculatePayroll = (form) => {
+  const annualCtc = parseAmount(form.annualCtc);
+  const basicSalary = parseAmount(form.basicSalary);
+  const employerPf = parseAmount(form.employerPf);
+  const employeePf = parseAmount(form.employeePf);
+  const professionalTax = parseAmount(form.professionalTax);
+  const monthlyCtc = annualCtc === null ? null : roundMoney(annualCtc / 12);
+  const otherAllowances =
+    monthlyCtc === null || basicSalary === null || employerPf === null
+      ? null
+      : roundMoney(Math.max(0, monthlyCtc - basicSalary - employerPf));
+  const grossSalary =
+    basicSalary === null || otherAllowances === null
+      ? null
+      : roundMoney(basicSalary + otherAllowances);
+  const netPay =
+    grossSalary === null || employeePf === null || professionalTax === null
+      ? null
+      : roundMoney(Math.max(0, grossSalary - employeePf - professionalTax));
+
+  return {
+    annualCtc,
+    monthlyCtc,
+    basicSalary,
+    employerPf,
+    employeePf,
+    professionalTax,
+    otherAllowances,
+    grossSalary,
+    netPay,
+  };
+};
+
+const getBreakdown = (payroll) => ({
+  monthlyCtc: Number(payroll.monthlyCtc || payroll.totalEarnings || payroll.grossSalary || 0),
+  annualCtc: Number(payroll.annualCtc || (payroll.monthlyCtc || payroll.totalEarnings || payroll.grossSalary || 0) * 12),
+  basicSalary: Number(payroll.basicSalary || payroll.baseSalary || 0),
+  employerPf: Number(payroll.employerPf || 0),
+  otherAllowances: Number(payroll.otherAllowances || Math.max(0, Number(payroll.grossSalary || payroll.totalEarnings || 0) - Number(payroll.basicSalary || payroll.baseSalary || 0))),
+  grossSalary: Number(payroll.grossSalary || payroll.totalEarnings || 0),
+  employeePf: Number(payroll.employeePf || payroll.pf || 0),
+  professionalTax: Number(payroll.professionalTax || 0),
+  netPay: Number(payroll.netPay || payroll.netSalary || 0),
+});
+
+const normalizePayroll = (record) => {
+  const breakdown = getBreakdown(record);
+  return {
+    id: record._id,
+    employee: record.empId?.name || "-",
+    employeeId: record.empId?.empId || record.empId || "-",
+    department: record.empId?.department?.title || "-",
+    designation: record.empId?.jobTitle || "-",
+    month: `${record.month || "-"} ${record.year || ""}`.trim(),
+    ...breakdown,
+    allowances: breakdown.otherAllowances,
+    deductions: Number(record.totalDeduction || breakdown.employeePf + breakdown.professionalTax),
+    netSalary: breakdown.netPay,
+    status: String(record.status || "pending").replace(/^./, (letter) =>
+      letter.toUpperCase(),
+    ),
+  };
+};
 
 const HrPayrollList = () => {
   const { token } = useSelector((state) => state.auth);
@@ -24,6 +107,8 @@ const HrPayrollList = () => {
   const [department, setDepartment] = useState("All Departments");
   const [status, setStatus] = useState("All Status");
   const [selectedPayroll, setSelectedPayroll] = useState(null);
+  const [activeMenuId, setActiveMenuId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const handleExport = async () => {
     if (!token) return;
@@ -60,6 +145,11 @@ const HrPayrollList = () => {
     month: "",
     year: new Date().getFullYear().toString(),
     employeeIds: [],
+    annualCtc: "",
+    basicSalary: "",
+    employerPf: "",
+    employeePf: "",
+    professionalTax: "",
   });
 
   useEffect(() => {
@@ -87,6 +177,18 @@ const HrPayrollList = () => {
       return;
     }
 
+    const breakdown = calculatePayroll(processForm);
+    if (
+      breakdown.annualCtc === null ||
+      breakdown.basicSalary === null ||
+      breakdown.employerPf === null ||
+      breakdown.employeePf === null ||
+      breakdown.professionalTax === null
+    ) {
+      errorMsgApi("Enter valid non-negative values for CTC, basic salary, PF and professional tax");
+      return;
+    }
+
     setProcessing(true);
     try {
       let successCount = 0;
@@ -97,21 +199,15 @@ const HrPayrollList = () => {
           const employee = employees.find((e) => e._id === empId);
           if (!employee) continue;
 
-          // Use employee's salary data if available, otherwise use defaults
           const payload = {
             empId,
             month: processForm.month,
             year: parseInt(processForm.year) || new Date().getFullYear(),
-            baseSalary: employee.salary?.base || 0,
-            hra: employee.salary?.hra || 0,
-            conveyance: employee.salary?.conveyance || 0,
-            specialAllowance: employee.salary?.specialAllowance || 0,
-            bonus: 0,
-            overtime: 0,
-            professionalTax: 0,
-            pf: 0,
-            tds: 0,
-            otherDeductions: 0,
+            annualCtc: breakdown.annualCtc,
+            basicSalary: breakdown.basicSalary,
+            employerPf: breakdown.employerPf,
+            employeePf: breakdown.employeePf,
+            professionalTax: breakdown.professionalTax,
             calendarDays: 0,
             paidDays: 0,
             lossDays: 0,
@@ -137,6 +233,11 @@ const HrPayrollList = () => {
         month: "",
         year: new Date().getFullYear().toString(),
         employeeIds: [],
+        annualCtc: "",
+        basicSalary: "",
+        employerPf: "",
+        employeePf: "",
+        professionalTax: "",
       });
 
       // Refresh the payroll list
@@ -145,23 +246,32 @@ const HrPayrollList = () => {
       });
       const records = response?.data?.data || [];
       setPayrolls(
-        records.map((record) => ({
-          id: record._id,
-          employee: record.empId?.name || "-",
-          employeeId: record.empId?.empId || record.empId || "-",
-          department: record.empId?.department?.title || "-",
-          designation: record.empId?.jobTitle || "-",
-          month: `${record.month || "-"} ${record.year || ""}`.trim(),
-          basic: Number(record.baseSalary || 0),
-          allowances:
-            Number(record.totalEarnings || record.grossSalary || 0) -
-            Number(record.baseSalary || 0),
-          deductions: Number(record.totalDeduction || 0),
-          netSalary: Number(record.netSalary || 0),
-          status: String(record.status || "pending").replace(/^./, (letter) =>
-            letter.toUpperCase(),
-          ),
-        })),
+        records.map((record) => {
+          const monthlyCtc = Number(record.monthlyCtc ?? record.totalEarnings ?? record.grossSalary ?? 0);
+          return {
+            id: record._id,
+            employee: record.empId?.name || "-",
+            employeeId: record.empId?.empId || record.empId || "-",
+            department: record.empId?.department?.title || "-",
+            designation: record.empId?.jobTitle || "-",
+            month: `${record.month || "-"} ${record.year || ""}`.trim(),
+            monthlyCtc,
+            annualCtc: Number(record.annualCtc ?? monthlyCtc * 12),
+            basic: Number(record.basicSalary ?? record.baseSalary ?? 0),
+            employerPf: Number(record.employerPf ?? 0),
+            employeePf: Number(record.employeePf ?? record.pf ?? 0),
+            professionalTax: Number(record.professionalTax ?? 0),
+            otherAllowances: Number(record.otherAllowances ?? Math.max(0, Number(record.grossSalary ?? record.totalEarnings ?? 0) - Number(record.basicSalary ?? record.baseSalary ?? 0))),
+            grossSalary: Number(record.grossSalary ?? record.totalEarnings ?? 0),
+            allowances:
+              Number(record.otherAllowances ?? Math.max(0, Number(record.grossSalary ?? record.totalEarnings ?? 0) - Number(record.basicSalary ?? record.baseSalary ?? 0))),
+            deductions: Number(record.totalDeduction ?? 0),
+            netSalary: Number(record.netPay ?? record.netSalary ?? 0),
+            status: String(record.status || "pending").replace(/^./, (letter) =>
+              letter.toUpperCase(),
+            ),
+          };
+        }),
       );
     } catch (error) {
       errorMsgApi(error?.response?.data?.message || "Failed to process payroll");
@@ -170,128 +280,44 @@ const HrPayrollList = () => {
     }
   };
 
-  const samplePayrolls = [
-    {
-      id: "PAY001",
-      employee: "John Doe",
-      employeeId: "EMP001",
-      department: "Engineering",
-      designation: "Software Engineer",
-      month: "September 2026",
-      basic: 45000,
-      allowances: 8000,
-      deductions: 3000,
-      netSalary: 50000,
-      status: "Processed",
-    },
-    {
-      id: "PAY002",
-      employee: "Priya Sharma",
-      employeeId: "EMP002",
-      department: "HR",
-      designation: "HR Executive",
-      month: "September 2026",
-      basic: 40000,
-      allowances: 7000,
-      deductions: 2500,
-      netSalary: 44500,
-      status: "Processed",
-    },
-    {
-      id: "PAY003",
-      employee: "Rahul Kumar",
-      employeeId: "EMP003",
-      department: "Finance",
-      designation: "Financial Analyst",
-      month: "September 2026",
-      basic: 48000,
-      allowances: 9000,
-      deductions: 4000,
-      netSalary: 53000,
-      status: "Pending",
-    },
-    {
-      id: "PAY004",
-      employee: "Sneha Reddy",
-      employeeId: "EMP004",
-      department: "Marketing",
-      designation: "Marketing Executive",
-      month: "September 2026",
-      basic: 42000,
-      allowances: 6000,
-      deductions: 2500,
-      netSalary: 45500,
-      status: "Processed",
-    },
-    {
-      id: "PAY005",
-      employee: "Arjun Patel",
-      employeeId: "EMP005",
-      department: "Engineering",
-      designation: "Frontend Developer",
-      month: "September 2026",
-      basic: 50000,
-      allowances: 10000,
-      deductions: 4500,
-      netSalary: 55500,
-      status: "Pending",
-    },
-    {
-      id: "PAY006",
-      employee: "Ananya Singh",
-      employeeId: "EMP006",
-      department: "Sales",
-      designation: "Sales Executive",
-      month: "September 2026",
-      basic: 38000,
-      allowances: 6500,
-      deductions: 2000,
-      netSalary: 42500,
-      status: "Processed",
-    },
-    {
-      id: "PAY007",
-      employee: "Vikram Rao",
-      employeeId: "EMP007",
-      department: "Engineering",
-      designation: "Backend Developer",
-      month: "September 2026",
-      basic: 52000,
-      allowances: 9000,
-      deductions: 5000,
-      netSalary: 56000,
-      status: "Pending",
-    },
-  ];
   const [payrolls, setPayrolls] = useState([]);
+  const payrollBreakdown = useMemo(
+    () => calculatePayroll(processForm),
+    [processForm],
+  );
 
   useEffect(() => {
     if (!token) return;
     API.get("/payroll", { headers: { Authorization: `Bearer ${token}` } })
       .then((response) => {
         const records = response?.data?.data || [];
-        setPayrolls(
-          records.map((record) => ({
-            id: record._id,
-            employee: record.empId?.name || "-",
-            employeeId: record.empId?.empId || record.empId || "-",
-            department: record.empId?.department?.title || "-",
-            designation: record.empId?.jobTitle || "-",
-            month: `${record.month || "-"} ${record.year || ""}`.trim(),
-            basic: Number(record.baseSalary || 0),
-            allowances:
-              Number(record.totalEarnings || record.grossSalary || 0) -
-              Number(record.baseSalary || 0),
-            deductions: Number(record.totalDeduction || 0),
-            netSalary: Number(record.netSalary || 0),
-            status: String(record.status || "pending").replace(/^./, (letter) =>
-              letter.toUpperCase(),
-            ),
-          })),
-        );
+        setPayrolls(records.map(normalizePayroll));
       })
       .catch((error) => console.error("Failed to fetch payroll:", error));
   }, [token]);
+
+  const handleDeletePayroll = async (payroll) => {
+    if (!token || deletingId || !window.confirm("Delete this payroll record?")) {
+      return;
+    }
+
+    setDeletingId(payroll.id);
+    try {
+      await API.delete(`/payroll/${payroll.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const response = await API.get("/payroll", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setPayrolls((response?.data?.data || []).map(normalizePayroll));
+      setActiveMenuId(null);
+      successfully("Payroll deleted successfully");
+    } catch (error) {
+      errorMsgApi(error?.response?.data?.message || "Failed to delete payroll");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const filteredPayrolls = useMemo(() => {
     return payrolls.filter((payroll) => {
@@ -361,7 +387,7 @@ const HrPayrollList = () => {
         <PayrollSummary
           icon={WalletCards}
           label="Total Payroll"
-          value={`₹${totalPayroll.toLocaleString("en-IN")}`}
+          value={formatCurrency(totalPayroll)}
           color="blue"
         />
 
@@ -505,23 +531,23 @@ const HrPayrollList = () => {
 
                     {/* BASIC */}
                     <td className="px-4 py-4 text-xs text-slate-700">
-                      ₹{payroll.basic.toLocaleString("en-IN")}
+                      {formatCurrency(payroll.basic)}
                     </td>
 
                     {/* ALLOWANCES */}
                     <td className="px-4 py-4 text-xs text-emerald-600">
-                      +₹{payroll.allowances.toLocaleString("en-IN")}
+                      +{formatCurrency(payroll.allowances)}
                     </td>
 
                     {/* DEDUCTIONS */}
                     <td className="px-4 py-4 text-xs text-red-500">
-                      -₹{payroll.deductions.toLocaleString("en-IN")}
+                      -{formatCurrency(payroll.deductions)}
                     </td>
 
                     {/* NET */}
                     <td className="px-4 py-4">
                       <p className="text-sm font-semibold text-slate-900">
-                        ₹{payroll.netSalary.toLocaleString("en-IN")}
+                        {formatCurrency(payroll.netSalary)}
                       </p>
                     </td>
 
@@ -532,7 +558,7 @@ const HrPayrollList = () => {
 
                     {/* ACTION */}
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-1">
+                      <div className="relative flex items-center gap-1">
                         <button
                           type="button"
                           title="View payroll"
@@ -552,10 +578,27 @@ const HrPayrollList = () => {
 
                         <button
                           type="button"
+                          onClick={() =>
+                            setActiveMenuId(
+                              activeMenuId === payroll.id ? null : payroll.id,
+                            )
+                          }
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100"
                         >
                           <MoreHorizontal size={17} />
                         </button>
+
+                        {activeMenuId === payroll.id && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePayroll(payroll)}
+                            disabled={deletingId === payroll.id}
+                            className="absolute right-0 top-9 z-20 flex items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-red-600 shadow-lg hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Trash2 size={14} />
+                            {deletingId === payroll.id ? "Deleting..." : "Delete Payroll"}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -634,6 +677,7 @@ const HrPayrollList = () => {
           processing={processing}
           form={processForm}
           setForm={setProcessForm}
+          breakdown={payrollBreakdown}
         />
       )}
     </div>
@@ -672,6 +716,67 @@ const PayrollSummary = ({
     </div>
   );
 };
+
+const SalaryRow = ({ label, value, tone }) => (
+  <div className="flex items-center justify-between text-sm">
+    <span className="text-slate-600">{label}</span>
+    <span
+      className={`font-semibold ${
+        tone === "positive"
+          ? "text-emerald-600"
+          : tone === "negative"
+            ? "text-red-500"
+            : "text-slate-900"
+      }`}
+    >
+      {value}
+    </span>
+  </div>
+);
+
+const formatBreakdownValue = (value) =>
+  value === null || value === undefined ? "—" : formatCurrency(value);
+
+const PayrollBreakdownSummary = ({ breakdown }) => (
+  <div className="border border-slate-200 rounded-xl p-4 space-y-4 bg-slate-50">
+    <div>
+      <h3 className="text-sm font-semibold text-slate-800 mb-2">Salary Summary</h3>
+      <div className="space-y-1.5">
+        <SalaryRow label="Monthly CTC" value={formatBreakdownValue(breakdown.monthlyCtc)} />
+        <SalaryRow label="Annual CTC" value={formatBreakdownValue(breakdown.annualCtc)} />
+        <SalaryRow label="Basic Salary" value={formatBreakdownValue(breakdown.basicSalary)} />
+        <SalaryRow label="Employer PF" value={formatBreakdownValue(breakdown.employerPf)} />
+        <SalaryRow label="Other Allowances" value={formatBreakdownValue(breakdown.otherAllowances)} />
+      </div>
+    </div>
+
+    <div>
+      <h3 className="text-sm font-semibold text-slate-800 mb-2">Earnings</h3>
+      <div className="space-y-1.5">
+        <SalaryRow label="Basic Salary" value={formatBreakdownValue(breakdown.basicSalary)} />
+        <SalaryRow label="Other Allowances" value={formatBreakdownValue(breakdown.otherAllowances)} />
+        <SalaryRow label="Gross Salary" value={formatBreakdownValue(breakdown.grossSalary)} />
+      </div>
+    </div>
+
+    <div>
+      <h3 className="text-sm font-semibold text-slate-800 mb-2">Deductions</h3>
+      <div className="space-y-1.5">
+        <SalaryRow label="Employee PF" value={formatBreakdownValue(breakdown.employeePf)} tone="negative" />
+        <SalaryRow label="Professional Tax" value={formatBreakdownValue(breakdown.professionalTax)} tone="negative" />
+      </div>
+    </div>
+
+    <div className="pt-2 border-t border-slate-200">
+      <h3 className="text-sm font-semibold text-slate-800 mb-2">Final Salary</h3>
+      <div className="space-y-1.5">
+        <SalaryRow label="Net Pay" value={formatBreakdownValue(breakdown.netPay)} />
+        <SalaryRow label="Monthly CTC" value={formatBreakdownValue(breakdown.monthlyCtc)} />
+        <SalaryRow label="Annual CTC" value={formatBreakdownValue(breakdown.annualCtc)} />
+      </div>
+    </div>
+  </div>
+);
 
 /* =========================================================
    TABLE HEADING
@@ -727,9 +832,11 @@ const PayrollStatus = ({ status }) => {
 ========================================================= */
 
 const PayrollDetailsModal = ({ payroll, onClose }) => {
+  const breakdown = getBreakdown(payroll);
+
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-xl">
         {/* HEADER */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
@@ -766,34 +873,7 @@ const PayrollDetailsModal = ({ payroll, onClose }) => {
           </div>
 
           {/* SALARY */}
-          <div className="mt-5 space-y-3">
-            <SalaryRow
-              label="Basic Salary"
-              value={`₹${payroll.basic.toLocaleString("en-IN")}`}
-            />
-
-            <SalaryRow
-              label="Allowances"
-              value={`+₹${payroll.allowances.toLocaleString("en-IN")}`}
-              positive
-            />
-
-            <SalaryRow
-              label="Deductions"
-              value={`-₹${payroll.deductions.toLocaleString("en-IN")}`}
-              negative
-            />
-
-            <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-800">
-                Net Salary
-              </span>
-
-              <span className="text-lg font-bold text-blue-600">
-                ₹{payroll.netSalary.toLocaleString("en-IN")}
-              </span>
-            </div>
-          </div>
+          <PayrollBreakdownSummary breakdown={breakdown} />
         </div>
 
         {/* FOOTER */}
@@ -821,6 +901,7 @@ const ProcessPayrollModal = ({
   processing,
   form,
   setForm,
+  breakdown,
 }) => {
   const monthOptions = [
     "January", "February", "March", "April", "May", "June",
@@ -875,6 +956,85 @@ const ProcessPayrollModal = ({
               />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Monthly CTC</label>
+              <input
+                type="number"
+                value={breakdown.monthlyCtc ?? ""}
+                readOnly
+                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600"
+                min="0"
+                step="0.01"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Annual CTC *</label>
+              <input
+                type="number"
+                value={form.annualCtc}
+                onChange={(e) => setForm({ ...form, annualCtc: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                min="0"
+                step="0.01"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Basic Salary *</label>
+              <input
+                type="number"
+                value={form.basicSalary}
+                onChange={(e) => setForm({ ...form, basicSalary: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                min="0"
+                step="0.01"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Employer PF *</label>
+              <input
+                type="number"
+                value={form.employerPf}
+                onChange={(e) => setForm({ ...form, employerPf: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                min="0"
+                step="0.01"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Employee PF *</label>
+              <input
+                type="number"
+                value={form.employeePf}
+                onChange={(e) => setForm({ ...form, employeePf: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                min="0"
+                step="0.01"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Professional Tax *</label>
+              <input
+                type="number"
+                value={form.professionalTax}
+                onChange={(e) => setForm({ ...form, professionalTax: e.target.value })}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                min="0"
+                step="0.01"
+                required
+              />
+            </div>
+          </div>
+
+          <PayrollBreakdownSummary breakdown={breakdown} />
 
           {/* Employee Selection */}
           <div>

@@ -123,22 +123,61 @@ const EmpPayslipScreen = () => {
       "";
 
     const basicSalary =
-      payslip.basicSalary ?? payslip.basic ?? payslip.salary?.basicSalary ?? 0;
+      payslip.basicSalary ?? payslip.baseSalary ?? payslip.salary?.basicSalary ?? 0;
+
+    const hra = payslip.hra ?? payslip.salary?.hra ?? 0;
+
+    const conveyance =
+      payslip.conveyance ?? payslip.salary?.conveyance ?? 0;
+
+    const specialAllowance =
+      payslip.specialAllowance ?? payslip.salary?.specialAllowance ?? 0;
+
+    const bonus =
+      payslip.bonus ?? payslip.advanceStatuoryBonus ?? payslip.salary?.bonus ?? 0;
+
+    const overtime =
+      payslip.overtime ?? payslip.salary?.overtime ?? 0;
 
     const allowances =
       payslip.allowances ??
       payslip.totalAllowances ??
+      payslip.otherAllowances ??
       payslip.salary?.allowances ??
-      0;
+      hra + conveyance + specialAllowance + bonus + overtime;
+
+    const professionalTax =
+      payslip.professionalTax ?? payslip.professionTax ?? payslip.salary?.professionalTax ?? 0;
+
+    const employeePf =
+      payslip.employeePf ?? payslip.pf ?? payslip.employeePF ?? payslip.salary?.employeePf ?? 0;
+
+    const tds = payslip.tds ?? payslip.salary?.tds ?? 0;
+
+    const otherDeductions =
+      payslip.otherDeductions ?? payslip.salary?.otherDeductions ?? 0;
 
     const deductions =
       payslip.deductions ??
       payslip.totalDeductions ??
+      payslip.totalDeduction ??
       payslip.salary?.deductions ??
-      0;
+      professionalTax + employeePf + tds + otherDeductions;
+
+    const totalEarnings =
+      payslip.totalEarnings ??
+      payslip.grossSalary ??
+      payslip.salary?.totalEarnings ??
+      basicSalary + allowances;
 
     const netSalary =
       payslip.netSalary ?? payslip.netPay ?? payslip.salary?.netSalary ?? 0;
+
+    const monthlyCtc =
+      payslip.monthlyCtc ?? payslip.monthlyCTC ?? payslip.salary?.monthlyCtc ?? 0;
+
+    const annualCtc =
+      payslip.annualCtc ?? payslip.annualCTC ?? payslip.salary?.annualCtc ?? 0;
 
     const generatedOn =
       payslip.generatedOn ||
@@ -150,28 +189,55 @@ const EmpPayslipScreen = () => {
       ...payslip,
       id: payslip._id || payslip.id,
       month: formatMonth(month),
+      year: payslip.year,
       basicSalary: formatCurrency(basicSalary),
+      hra: formatCurrency(hra),
+      conveyance: formatCurrency(conveyance),
+      specialAllowance: formatCurrency(specialAllowance),
+      bonus: formatCurrency(bonus),
+      overtime: formatCurrency(overtime),
       allowances: formatCurrency(allowances),
       deductions: formatCurrency(deductions),
+      totalEarnings: formatCurrency(totalEarnings),
+      grossSalary: formatCurrency(totalEarnings),
+      professionalTax: formatCurrency(professionalTax),
+      employeePf: formatCurrency(employeePf),
+      tds: formatCurrency(tds),
+      otherDeductions: formatCurrency(otherDeductions),
+      totalDeductions: formatCurrency(deductions),
       netSalary: formatCurrency(netSalary),
+      monthlyCtc: formatCurrency(monthlyCtc),
+      annualCtc: formatCurrency(annualCtc),
       generatedOn: formatDate(generatedOn),
       status: payslip.status || "Generated",
       rawBasicSalary: basicSalary,
+      rawHra: hra,
+      rawConveyance: conveyance,
+      rawSpecialAllowance: specialAllowance,
+      rawBonus: bonus,
+      rawOvertime: overtime,
       rawAllowances: allowances,
       rawDeductions: deductions,
+      rawTotalEarnings: totalEarnings,
+      rawProfessionalTax: professionalTax,
+      rawEmployeePf: employeePf,
+      rawTds: tds,
+      rawOtherDeductions: otherDeductions,
       rawNetSalary: netSalary,
+      rawMonthlyCtc: monthlyCtc,
+      rawAnnualCtc: annualCtc,
     };
   };
 
   const extractPayslips = (response) => {
     const payload = response?.data;
 
-    if (Array.isArray(payload?.data)) {
-      return payload.data;
-    }
-
     if (Array.isArray(payload?.data?.payslips)) {
       return payload.data.payslips;
+    }
+
+    if (Array.isArray(payload?.data)) {
+      return payload.data;
     }
 
     if (Array.isArray(payload?.payslips)) {
@@ -185,6 +251,16 @@ const EmpPayslipScreen = () => {
     return [];
   };
 
+  const extractEmployee = (response) => {
+    const payload = response?.data;
+    return (
+      payload?.data?.employee ||
+      payload?.data?.user ||
+      payload?.employee ||
+      payload?.user
+    );
+  };
+
   const fetchPayslips = async () => {
     try {
       const params = {};
@@ -194,13 +270,7 @@ const EmpPayslipScreen = () => {
         params,
       });
 
-      const data = response?.data;
-
-      const user =
-        data?.data?.employee ||
-        data?.data?.user ||
-        data?.employee ||
-        data?.user;
+      const user = extractEmployee(response);
 
       if (user) {
         setEmployee({
@@ -279,10 +349,22 @@ const EmpPayslipScreen = () => {
         data?.data?.payslip || data?.data || data?.payslip || data;
 
       if (details && typeof details === "object") {
-        setSelectedPayslip({
-          ...payslip,
-          ...normalizePayslip(details),
-        });
+        const normalized = normalizePayslip(details);
+        const employee = extractEmployee(response);
+        if (employee && !normalized.employee) {
+          normalized.employee =
+            employee.name ||
+            `${employee.firstName || ""} ${employee.lastName || ""}`.trim();
+          normalized.employeeId =
+            normalized.employeeId || employee.employeeId || employee.empId;
+          normalized.department =
+            normalized.department || getNestedValue(employee.department, "");
+          normalized.designation =
+            normalized.designation ||
+            employee.designation ||
+            employee.jobTitle;
+        }
+        setSelectedPayslip({ ...payslip, ...normalized });
       } else {
         setSelectedPayslip(payslip);
       }
@@ -706,6 +788,22 @@ const PayslipModal = ({ payslip, employee, token, onClose }) => {
 
             <div className="overflow-hidden rounded-xl border border-slate-200">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <span className="text-sm text-slate-600">Monthly CTC</span>
+
+                <span className="text-sm font-medium text-slate-800">
+                  {payslip.monthlyCtc}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <span className="text-sm text-slate-600">Annual CTC</span>
+
+                <span className="text-sm font-medium text-slate-800">
+                  {payslip.annualCtc}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                 <span className="text-sm text-slate-600">Basic Salary</span>
 
                 <span className="text-sm font-medium text-slate-800">
@@ -714,18 +812,94 @@ const PayslipModal = ({ payslip, employee, token, onClose }) => {
               </div>
 
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                <span className="text-sm text-slate-600">Allowances</span>
+                <span className="text-sm text-slate-600">HRA</span>
 
                 <span className="text-sm font-medium text-slate-800">
-                  {payslip.allowances}
+                  {payslip.hra}
                 </span>
               </div>
 
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                <span className="text-sm text-slate-600">Deductions</span>
+                <span className="text-sm text-slate-600">Conveyance</span>
+
+                <span className="text-sm font-medium text-slate-800">
+                  {payslip.conveyance}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <span className="text-sm text-slate-600">Special Allowance</span>
+
+                <span className="text-sm font-medium text-slate-800">
+                  {payslip.specialAllowance}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <span className="text-sm text-slate-600">Bonus</span>
+
+                <span className="text-sm font-medium text-slate-800">
+                  {payslip.bonus}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <span className="text-sm text-slate-600">Overtime</span>
+
+                <span className="text-sm font-medium text-slate-800">
+                  {payslip.overtime}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 bg-emerald-50 px-4 py-3">
+                <span className="text-sm font-semibold text-slate-900">
+                  Total Earnings / Gross Salary
+                </span>
+
+                <span className="text-sm font-bold text-emerald-700">
+                  {payslip.totalEarnings}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <span className="text-sm text-slate-600">Professional Tax</span>
 
                 <span className="text-sm font-medium text-red-600">
-                  - {payslip.deductions}
+                  - {payslip.professionalTax}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <span className="text-sm text-slate-600">Employee PF</span>
+
+                <span className="text-sm font-medium text-red-600">
+                  - {payslip.employeePf}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <span className="text-sm text-slate-600">TDS</span>
+
+                <span className="text-sm font-medium text-red-600">
+                  - {payslip.tds}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <span className="text-sm text-slate-600">Other Deductions</span>
+
+                <span className="text-sm font-medium text-red-600">
+                  - {payslip.otherDeductions}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between bg-red-50 px-4 py-3">
+                <span className="text-sm font-semibold text-slate-900">
+                  Total Deductions
+                </span>
+
+                <span className="text-sm font-bold text-red-700">
+                  {payslip.totalDeductions}
                 </span>
               </div>
 
@@ -736,6 +910,13 @@ const PayslipModal = ({ payslip, employee, token, onClose }) => {
 
                 <span className="text-lg font-bold text-blue-600">
                   {payslip.netSalary}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-sm text-slate-600">Payroll Status</span>
+                <span className="text-sm font-medium text-slate-900">
+                  {payslip.status || "-"}
                 </span>
               </div>
             </div>

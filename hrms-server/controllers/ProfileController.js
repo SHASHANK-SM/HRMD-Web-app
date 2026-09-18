@@ -8,7 +8,7 @@ export const getProfile = async (req, res) => {
   return success(res, { data: user });
 };
 export const updateProfile = async (req, res) => {
-  const allowed = ["name", "mobile", "gender", "dob", "maritalStatus", "nationality", "location"];
+  const allowed = ["name", "email", "mobile", "jobTitle", "gender", "dob", "maritalStatus", "nationality", "location"];
   const data = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
   if (!Object.keys(data).length) return failure(res, 400, "No permitted profile fields supplied");
   const user = await User.findByIdAndUpdate(req.user._id, { $set: data }, { new: true, runValidators: true }).select("-password");

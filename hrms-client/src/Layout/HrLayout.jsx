@@ -15,7 +15,7 @@ const HrLayout = () => {
     e.preventDefault();
     const query = searchQuery.trim();
     if (query) {
-      navigate(`/hr/employees?search=${encodeURIComponent(query)}`);
+      navigate(`/employees-details?search=${encodeURIComponent(query)}`);
       setSearchQuery("");
       setSearchOpen(false);
     }
